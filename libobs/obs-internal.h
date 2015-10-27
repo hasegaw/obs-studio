@@ -369,6 +369,7 @@ struct obs_context_data {
 	char                            *name;
 	void                            *data;
 	obs_data_t                      *settings;
+	obs_data_t                      *private_settings;
 	signal_handler_t                *signals;
 	proc_handler_t                  *procs;
 

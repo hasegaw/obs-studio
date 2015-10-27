@@ -738,6 +738,10 @@ EXPORT void obs_source_filter_set_order(obs_source_t *source,
 /** Gets the settings string for a source */
 EXPORT obs_data_t *obs_source_get_settings(const obs_source_t *source);
 
+EXPORT void obs_source_set_private_settings(obs_source_t *source,
+		obs_data_t *data);
+EXPORT obs_data_t *obs_source_get_private_settings(const obs_source_t *source);
+
 /** Gets the name of a source */
 EXPORT const char *obs_source_get_name(const obs_source_t *source);
 
@@ -1200,6 +1204,10 @@ EXPORT void obs_output_pause(obs_output_t *output);
 /* Gets the current output settings string */
 EXPORT obs_data_t *obs_output_get_settings(const obs_output_t *output);
 
+EXPORT void obs_output_set_private_settings(obs_output_t *output,
+		obs_data_t *data);
+EXPORT obs_data_t *obs_output_get_private_settings(const obs_output_t *output);
+
 /** Returns the signal handler for an output  */
 EXPORT signal_handler_t *obs_output_get_signal_handler(
 		const obs_output_t *output);
@@ -1462,6 +1470,10 @@ EXPORT bool obs_encoder_get_extra_data(const obs_encoder_t *encoder,
 /** Returns the current settings for this encoder */
 EXPORT obs_data_t *obs_encoder_get_settings(const obs_encoder_t *encoder);
 
+EXPORT void obs_encoder_set_private_settings(obs_encoder_t *encoder,
+		obs_data_t *data);
+EXPORT obs_data_t *obs_encoder_get_private_settings(const obs_encoder_t *encoder);
+
 /** Sets the video output context to be used with this encoder */
 EXPORT void obs_encoder_set_video(obs_encoder_t *encoder, video_t *video);
 
@@ -1541,6 +1553,10 @@ EXPORT void obs_service_update(obs_service_t *service, obs_data_t *settings);
 
 /** Returns the current settings for this service */
 EXPORT obs_data_t *obs_service_get_settings(const obs_service_t *service);
+
+EXPORT void obs_service_set_private_settings(obs_service_t *service,
+		obs_data_t *data);
+EXPORT obs_data_t *obs_service_get_private_settings(const obs_service_t *service);
 
 /** Returns the URL for this service context */
 EXPORT const char *obs_service_get_url(const obs_service_t *service);

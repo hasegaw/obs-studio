@@ -349,6 +349,25 @@ obs_data_t *obs_encoder_get_settings(const obs_encoder_t *encoder)
 	return encoder->context.settings;
 }
 
+obs_data_t *obs_encoder_get_private_settings(const obs_encoder_t *encoder)
+{
+	if (!obs_encoder_valid(encoder, "obs_encoder_get_private_settings"))
+		return NULL;
+
+	obs_data_addref(encoder->context.private_settings);
+	return encoder->context.private_settings;
+}
+
+void obs_encoder_set_private_settings(obs_encoder_t *encoder,
+		obs_data_t *settings)
+{
+	if (!obs_encoder_valid(encoder, "obs_encoder_set_private_settings"))
+		return;
+
+	if (settings)
+		obs_data_apply(encoder->context.private_settings, settings);
+}
+
 static inline void reset_audio_buffers(struct obs_encoder *encoder)
 {
 	free_audio_buffers(encoder);

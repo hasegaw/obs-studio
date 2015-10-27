@@ -185,6 +185,25 @@ obs_data_t *obs_service_get_settings(const obs_service_t *service)
 	return service->context.settings;
 }
 
+obs_data_t *obs_service_get_private_settings(const obs_service_t *service)
+{
+	if (!obs_service_valid(service, "obs_service_get_private_settings"))
+		return NULL;
+
+	obs_data_addref(service->context.private_settings);
+	return service->context.private_settings;
+}
+
+void obs_service_set_private_settings(obs_service_t *service,
+		obs_data_t *settings)
+{
+	if (!obs_service_valid(service, "obs_service_set_private_settings"))
+		return;
+
+	if (settings)
+		obs_data_apply(service->context.private_settings, settings);
+}
+
 signal_handler_t *obs_service_get_signal_handler(const obs_service_t *service)
 {
 	return obs_service_valid(service, "obs_service_get_signal_handler") ?

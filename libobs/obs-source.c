@@ -1746,6 +1746,24 @@ obs_data_t *obs_source_get_settings(const obs_source_t *source)
 	return source->context.settings;
 }
 
+obs_data_t *obs_source_get_private_settings(const obs_source_t *source)
+{
+	if (!obs_source_valid(source, "obs_source_get_private_settings"))
+		return NULL;
+
+	obs_data_addref(source->context.private_settings);
+	return source->context.private_settings;
+}
+
+void obs_source_set_private_settings(obs_source_t *source, obs_data_t *settings)
+{
+	if (!obs_source_valid(source, "obs_source_set_private_settings"))
+		return;
+
+	if (settings)
+		obs_data_apply(source->context.private_settings, settings);
+}
+
 static inline struct obs_source_frame *filter_async_video(obs_source_t *source,
 		struct obs_source_frame *in)
 {
