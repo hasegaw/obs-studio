@@ -20,7 +20,6 @@
 #include <QBuffer>
 #include <QAction>
 #include <obs.hpp>
-#include <unordered_map>
 #include <vector>
 #include <memory>
 #include "window-main.hpp"
@@ -54,7 +53,7 @@ struct BasicOutputHandler;
 
 enum class QtDataRole {
 	OBSRef = Qt::UserRole,
-	OBSSignals,
+	SceneInfo,
 };
 
 class OBSBasic : public OBSMainWindow {
@@ -71,8 +70,6 @@ class OBSBasic : public OBSMainWindow {
 	};
 
 private:
-	std::unordered_map<obs_source_t*, int> sourceSceneRefs;
-
 	std::vector<VolControl*> volumes;
 
 	std::vector<OBSSignal> signalHandlers;
@@ -171,7 +168,6 @@ private:
 
 	void CloseDialogs();
 	void ClearSceneData();
-	void CleanupUnusedSources();
 
 	void Nudge(int dist, MoveDir dir);
 	void OpenProjector(obs_source_t *source, int monitor);
@@ -245,7 +241,7 @@ private:
 	static void SceneItemRemoved(void *data, calldata_t *params);
 	static void SceneItemSelected(void *data, calldata_t *params);
 	static void SceneItemDeselected(void *data, calldata_t *params);
-	static void SourceAdded(void *data, calldata_t *params);
+	static void SourceLoaded(void *data, calldata_t *params);
 	static void SourceRemoved(void *data, calldata_t *params);
 	static void SourceActivated(void *data, calldata_t *params);
 	static void SourceDeactivated(void *data, calldata_t *params);

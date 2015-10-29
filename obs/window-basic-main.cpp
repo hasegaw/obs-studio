@@ -60,11 +60,15 @@
 
 using namespace std;
 
-Q_DECLARE_METATYPE(OBSScene);
+struct SceneInfo {
+	OBSScene scene;
+	vector<shared_ptr<OBSSignal>> handlers;
+};
+
+Q_DECLARE_METATYPE(SceneInfo);
 Q_DECLARE_METATYPE(OBSSceneItem);
 Q_DECLARE_METATYPE(OBSSource);
 Q_DECLARE_METATYPE(obs_order_movement);
-Q_DECLARE_METATYPE(std::vector<std::shared_ptr<OBSSignal>>);
 
 template <typename T>
 static T GetOBSRef(QListWidgetItem *item)
@@ -77,6 +81,12 @@ static void SetOBSRef(QListWidgetItem *item, T &&val)
 {
 	item->setData(static_cast<int>(QtDataRole::OBSRef),
 			QVariant::fromValue(val));
+}
+
+static OBSScene GetSceneRef(QListWidgetItem *item)
+{
+	return item->data(static_cast<int>(QtDataRole::SceneInfo)).
+		value<SceneInfo>().scene;
 }
 
 static void AddExtraModulePaths()
@@ -217,11 +227,23 @@ OBSBasic::OBSBasic(QWidget *parent)
 	addNudge(Qt::Key_Right, SLOT(NudgeRight()));
 }
 
+#define FORMAT_VERSION 1
+#define PRIV_GLOBAL_AUDIO "global_audio"
+#define PRIV_GLOBAL_AUDIO_CHANNEL "global_audio_channel"
+
 static void SaveAudioDevice(const char *name, int channel, obs_data_t *parent)
 {
 	obs_source_t *source = obs_get_output_source(channel);
 	if (!source)
 		return;
+
+	obs_data_t *priv = obs_data_create();
+	obs_data_set_bool(priv, PRIV_GLOBAL_AUDIO, true);
+	obs_data_set_int(priv, PRIV_GLOBAL_AUDIO_CHANNEL, channel);
+	obs_source_set_private_settings(source, priv);
+	obs_data_release(priv);
+
+	/* below still provided for backward compatibility */
 
 	obs_data_t *data = obs_save_source(source);
 
@@ -233,13 +255,7 @@ static void SaveAudioDevice(const char *name, int channel, obs_data_t *parent)
 
 static obs_data_t *GenerateSaveData(obs_data_array_t *sceneOrder)
 {
-	obs_data_t       *saveData     = obs_data_create();
-	obs_data_array_t *sourcesArray = obs_save_sources();
-	obs_source_t     *currentScene = obs_get_output_source(0);
-	const char       *sceneName   = obs_source_get_name(currentScene);
-
-	const char *sceneCollection = config_get_string(App()->GlobalConfig(),
-			"Basic", "SceneCollection");
+	obs_data_t *saveData = obs_data_create();
 
 	SaveAudioDevice(DESKTOP_AUDIO_1, 1, saveData);
 	SaveAudioDevice(DESKTOP_AUDIO_2, 2, saveData);
@@ -247,6 +263,14 @@ static obs_data_t *GenerateSaveData(obs_data_array_t *sceneOrder)
 	SaveAudioDevice(AUX_AUDIO_2,     4, saveData);
 	SaveAudioDevice(AUX_AUDIO_3,     5, saveData);
 
+	obs_data_array_t *sourcesArray = obs_save_sources();
+	obs_source_t     *currentScene = obs_get_output_source(0);
+	const char       *sceneName   = obs_source_get_name(currentScene);
+
+	const char *sceneCollection = config_get_string(App()->GlobalConfig(),
+			"Basic", "SceneCollection");
+
+	obs_data_set_int(saveData, "format_version", FORMAT_VERSION);
 	obs_data_set_string(saveData, "current_scene", sceneName);
 	obs_data_set_array(saveData, "scene_order", sceneOrder);
 	obs_data_set_string(saveData, "name", sceneCollection);
@@ -370,9 +394,6 @@ void OBSBasic::CreateDefaultScene(bool firstStart)
 	ClearSceneData();
 
 	obs_scene_t  *scene  = obs_scene_create(Str("Basic.Scene"));
-	obs_source_t *source = obs_scene_get_source(scene);
-
-	obs_add_source(source);
 
 	if (firstStart)
 		CreateFirstRunSources();
@@ -412,30 +433,6 @@ void OBSBasic::LoadSceneListOrder(obs_data_array_t *array)
 	}
 }
 
-void OBSBasic::CleanupUnusedSources()
-{
-	auto removeUnusedSources = [&](obs_source_t *source)
-	{
-		obs_scene_t *scene = obs_scene_from_source(source);
-		if (scene)
-			return;
-
-		if (sourceSceneRefs[source] == 0) {
-			sourceSceneRefs.erase(source);
-			obs_source_remove(source);
-		}
-	};
-	using func_type = decltype(removeUnusedSources);
-
-	obs_enum_sources(
-			[](void *f, obs_source_t *source)
-			{
-				(*static_cast<func_type*>(f))(source);
-				return true;
-			},
-			static_cast<void*>(&removeUnusedSources));
-}
-
 void OBSBasic::Load(const char *file)
 {
 	if (!file || !os_file_exists(file)) {
@@ -464,6 +461,8 @@ void OBSBasic::Load(const char *file)
 	const char       *sceneName = obs_data_get_string(data,
 			"current_scene");
 
+	int formatVer = (int)obs_data_get_int(data, "format_version");
+
 	const char *curSceneCollection = config_get_string(
 			App()->GlobalConfig(), "Basic", "SceneCollection");
 
@@ -475,11 +474,13 @@ void OBSBasic::Load(const char *file)
 	if (!name || !*name)
 		name = curSceneCollection;
 
-	LoadAudioDevice(DESKTOP_AUDIO_1, 1, data);
-	LoadAudioDevice(DESKTOP_AUDIO_2, 2, data);
-	LoadAudioDevice(AUX_AUDIO_1,     3, data);
-	LoadAudioDevice(AUX_AUDIO_2,     4, data);
-	LoadAudioDevice(AUX_AUDIO_3,     5, data);
+	if (formatVer == 0) {
+		LoadAudioDevice(DESKTOP_AUDIO_1, 1, data);
+		LoadAudioDevice(DESKTOP_AUDIO_2, 2, data);
+		LoadAudioDevice(AUX_AUDIO_1,     3, data);
+		LoadAudioDevice(AUX_AUDIO_2,     4, data);
+		LoadAudioDevice(AUX_AUDIO_3,     5, data);
+	}
 
 	obs_load_sources(sources);
 
@@ -502,8 +503,6 @@ void OBSBasic::Load(const char *file)
 			file_base.c_str());
 
 	obs_data_release(data);
-
-	CleanupUnusedSources();
 
 	disableSaving--;
 }
@@ -766,8 +765,8 @@ void OBSBasic::InitOBSCallbacks()
 	ProfileScope("OBSBasic::InitOBSCallbacks");
 
 	signalHandlers.reserve(signalHandlers.size() + 6);
-	signalHandlers.emplace_back(obs_get_signal_handler(), "source_add",
-			OBSBasic::SourceAdded, this);
+	signalHandlers.emplace_back(obs_get_signal_handler(), "source_load",
+			OBSBasic::SourceLoaded, this);
 	signalHandlers.emplace_back(obs_get_signal_handler(), "source_remove",
 			OBSBasic::SourceRemoved, this);
 	signalHandlers.emplace_back(obs_get_signal_handler(), "channel_change",
@@ -1236,7 +1235,7 @@ void OBSBasic::SaveProjectDeferred()
 OBSScene OBSBasic::GetCurrentScene()
 {
 	QListWidgetItem *item = ui->scenes->currentItem();
-	return item ? GetOBSRef<OBSScene>(item) : nullptr;
+	return item ? GetSceneRef(item) : nullptr;
 }
 
 OBSSceneItem OBSBasic::GetSceneItem(QListWidgetItem *item)
@@ -1313,8 +1312,6 @@ void OBSBasic::AddScene(OBSSource source)
 	obs_scene_t *scene = obs_scene_from_source(source);
 
 	QListWidgetItem *item = new QListWidgetItem(QT_UTF8(name));
-	SetOBSRef(item, OBSScene(scene));
-	ui->scenes->addItem(item);
 
 	obs_hotkey_register_source(source, "OBSBasic.SelectScene",
 			Str("Basic.Hotkeys.SelectScene"),
@@ -1343,8 +1340,13 @@ void OBSBasic::AddScene(OBSSource source)
 					OBSBasic::SceneReordered, this),
 	};
 
-	item->setData(static_cast<int>(QtDataRole::OBSSignals),
-			QVariant::fromValue(handlers));
+	SceneInfo info;
+	info.scene = scene;
+	info.handlers = handlers;
+
+	item->setData(static_cast<int>(QtDataRole::SceneInfo),
+			QVariant::fromValue(info));
+	ui->scenes->addItem(item);
 
 	/* if the scene already has items (a duplicated scene) add them */
 	auto addSceneItem = [this] (obs_sceneitem_t *item)
@@ -1374,7 +1376,7 @@ void OBSBasic::RemoveScene(OBSSource source)
 	int count = ui->scenes->count();
 	for (int i = 0; i < count; i++) {
 		auto item = ui->scenes->item(i);
-		auto cur_scene = GetOBSRef<OBSScene>(item);
+		auto cur_scene = GetSceneRef(item);
 		if (cur_scene != scene)
 			continue;
 
@@ -1388,37 +1390,16 @@ void OBSBasic::RemoveScene(OBSSource source)
 		delete sel;
 	}
 
-	auto DeleteSceneRefs = [&](obs_sceneitem_t *si)
-	{
-		obs_source_t *source = obs_sceneitem_get_source(si);
-		sourceSceneRefs[source] -= 1;
-
-		if (!sourceSceneRefs[source]) {
-			obs_source_remove(source);
-			sourceSceneRefs.erase(source);
-		}
-	};
-	using DeleteSceneRefs_t = decltype(DeleteSceneRefs);
-
-	obs_scene_enum_items(obs_scene_from_source(source),
-			[](obs_scene_t *, obs_sceneitem_t *si, void *data)
-	{
-		(*static_cast<DeleteSceneRefs_t*>(data))(si);
-		return true;
-	}, static_cast<void*>(&DeleteSceneRefs));
-
 	SaveProject();
 }
 
 void OBSBasic::AddSceneItem(OBSSceneItem item)
 {
 	obs_scene_t  *scene  = obs_sceneitem_get_scene(item);
-	obs_source_t *source = obs_sceneitem_get_source(item);
 
 	if (GetCurrentScene() == scene)
 		InsertSceneItem(item);
 
-	sourceSceneRefs[source] = sourceSceneRefs[source] + 1;
 	SaveProject();
 }
 
@@ -1435,16 +1416,6 @@ void OBSBasic::RemoveSceneItem(OBSSceneItem item)
 				break;
 			}
 		}
-	}
-
-	obs_source_t *source = obs_sceneitem_get_source(item);
-
-	int scenes = sourceSceneRefs[source] - 1;
-	sourceSceneRefs[source] = scenes;
-
-	if (scenes == 0) {
-		obs_source_remove(source);
-		sourceSceneRefs.erase(source);
 	}
 
 	SaveProject();
@@ -1764,7 +1735,6 @@ void OBSBasic::DuplicateSelectedScene()
 		obs_scene_t *scene = obs_scene_duplicate(curScene,
 				name.c_str());
 		source = obs_scene_get_source(scene);
-		obs_add_source(source);
 		obs_scene_release(scene);
 
 		obs_set_output_source(0, source);
@@ -1907,15 +1877,25 @@ void OBSBasic::SceneItemDeselected(void *data, calldata_t *params)
 			Q_ARG(bool, false));
 }
 
-void OBSBasic::SourceAdded(void *data, calldata_t *params)
+void OBSBasic::SourceLoaded(void *data, calldata_t *params)
 {
 	OBSBasic *window = static_cast<OBSBasic*>(data);
 	obs_source_t *source = (obs_source_t*)calldata_ptr(params, "source");
+	obs_data_t *priv = obs_source_get_private_settings(source);
 
-	if (obs_scene_from_source(source) != NULL)
+	if (obs_scene_from_source(source) != NULL) {
 		QMetaObject::invokeMethod(window,
 				"AddScene",
 				Q_ARG(OBSSource, OBSSource(source)));
+
+	} else if (obs_data_get_bool(priv, PRIV_GLOBAL_AUDIO)) {
+		int channel = (int)obs_data_get_int(priv,
+				PRIV_GLOBAL_AUDIO_CHANNEL);
+
+		obs_set_output_source(channel, source);
+	}
+
+	obs_data_release(priv);
 }
 
 void OBSBasic::SourceRemoved(void *data, calldata_t *params)
@@ -2280,8 +2260,6 @@ void OBSBasic::ClearSceneData()
 
 	obs_enum_sources(cb, nullptr);
 
-	sourceSceneRefs.clear();
-
 	disableSaving--;
 
 	blog(LOG_INFO, "All scene data cleared");
@@ -2395,9 +2373,9 @@ void OBSBasic::on_scenes_currentItemChanged(QListWidgetItem *current,
 		return;
 
 	if (current) {
-		obs_scene_t *scene;
+		OBSScene scene;
 
-		scene = GetOBSRef<OBSScene>(current);
+		scene = GetSceneRef(current);
 		source = obs_scene_get_source(scene);
 	}
 
@@ -2526,10 +2504,9 @@ void OBSBasic::on_actionAddScene_triggered()
 
 		obs_scene_t *scene = obs_scene_create(name.c_str());
 		source = obs_scene_get_source(scene);
-		obs_add_source(source);
-		obs_scene_release(scene);
-
+		AddScene(source);
 		obs_set_output_source(0, source);
+		obs_scene_release(scene);
 	}
 }
 

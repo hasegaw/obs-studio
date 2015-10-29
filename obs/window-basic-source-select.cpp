@@ -133,7 +133,7 @@ bool AddNew(QWidget *parent, const char *id, const char *name,
 				id, name, NULL, nullptr);
 
 		if (source) {
-			obs_add_source(source);
+			//FIXME: obs_add_source(source);
 
 			AddSourceData data;
 			data.source = source;
