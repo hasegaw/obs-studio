@@ -60,15 +60,21 @@
 
 using namespace std;
 
-struct SceneInfo {
-	OBSScene scene;
+namespace {
+
+template <typename OBSRef>
+struct SignalContainer {
+	OBSRef ref;
 	vector<shared_ptr<OBSSignal>> handlers;
 };
 
-Q_DECLARE_METATYPE(SceneInfo);
+}
+
+Q_DECLARE_METATYPE(OBSScene);
 Q_DECLARE_METATYPE(OBSSceneItem);
 Q_DECLARE_METATYPE(OBSSource);
 Q_DECLARE_METATYPE(obs_order_movement);
+Q_DECLARE_METATYPE(SignalContainer<OBSScene>);
 
 template <typename T>
 static T GetOBSRef(QListWidgetItem *item)
@@ -81,12 +87,6 @@ static void SetOBSRef(QListWidgetItem *item, T &&val)
 {
 	item->setData(static_cast<int>(QtDataRole::OBSRef),
 			QVariant::fromValue(val));
-}
-
-static OBSScene GetSceneRef(QListWidgetItem *item)
-{
-	return item->data(static_cast<int>(QtDataRole::SceneInfo)).
-		value<SceneInfo>().scene;
 }
 
 static void AddExtraModulePaths()
@@ -1236,7 +1236,7 @@ void OBSBasic::SaveProjectDeferred()
 OBSScene OBSBasic::GetCurrentScene()
 {
 	QListWidgetItem *item = ui->scenes->currentItem();
-	return item ? GetSceneRef(item) : nullptr;
+	return item ? GetOBSRef<OBSScene>(item) : nullptr;
 }
 
 OBSSceneItem OBSBasic::GetSceneItem(QListWidgetItem *item)
@@ -1313,6 +1313,8 @@ void OBSBasic::AddScene(OBSSource source)
 	obs_scene_t *scene = obs_scene_from_source(source);
 
 	QListWidgetItem *item = new QListWidgetItem(QT_UTF8(name));
+	SetOBSRef(item, OBSScene(scene));
+	ui->scenes->addItem(item);
 
 	obs_hotkey_register_source(source, "OBSBasic.SelectScene",
 			Str("Basic.Hotkeys.SelectScene"),
@@ -1328,7 +1330,9 @@ void OBSBasic::AddScene(OBSSource source)
 
 	signal_handler_t *handler = obs_source_get_signal_handler(source);
 
-	std::vector<std::shared_ptr<OBSSignal>> handlers{
+	SignalContainer<OBSScene> container;
+	container.ref = scene;
+	container.handlers.assign({
 		std::make_shared<OBSSignal>(handler, "item_add",
 					OBSBasic::SceneItemAdded, this),
 		std::make_shared<OBSSignal>(handler, "item_remove",
@@ -1339,15 +1343,10 @@ void OBSBasic::AddScene(OBSSource source)
 					OBSBasic::SceneItemDeselected, this),
 		std::make_shared<OBSSignal>(handler, "reorder",
 					OBSBasic::SceneReordered, this),
-	};
+	});
 
-	SceneInfo info;
-	info.scene = scene;
-	info.handlers = handlers;
-
-	item->setData(static_cast<int>(QtDataRole::SceneInfo),
-			QVariant::fromValue(info));
-	ui->scenes->addItem(item);
+	item->setData(static_cast<int>(QtDataRole::OBSSignals),
+			QVariant::fromValue(container));
 
 	/* if the scene already has items (a duplicated scene) add them */
 	auto addSceneItem = [this] (obs_sceneitem_t *item)
@@ -1377,7 +1376,7 @@ void OBSBasic::RemoveScene(OBSSource source)
 	int count = ui->scenes->count();
 	for (int i = 0; i < count; i++) {
 		auto item = ui->scenes->item(i);
-		auto cur_scene = GetSceneRef(item);
+		auto cur_scene = GetOBSRef<OBSScene>(item);
 		if (cur_scene != scene)
 			continue;
 
@@ -2365,9 +2364,9 @@ void OBSBasic::on_scenes_currentItemChanged(QListWidgetItem *current,
 		return;
 
 	if (current) {
-		OBSScene scene;
+		obs_scene_t *scene;
 
-		scene = GetSceneRef(current);
+		scene = GetOBSRef<OBSScene>(current);
 		source = obs_scene_get_source(scene);
 	}
 

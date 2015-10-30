@@ -53,7 +53,7 @@ struct BasicOutputHandler;
 
 enum class QtDataRole {
 	OBSRef = Qt::UserRole,
-	SceneInfo,
+	OBSSignals,
 };
 
 class OBSBasic : public OBSMainWindow {
