@@ -227,23 +227,14 @@ OBSBasic::OBSBasic(QWidget *parent)
 	addNudge(Qt::Key_Right, SLOT(NudgeRight()));
 }
 
-#define FORMAT_VERSION 1
-#define PRIV_GLOBAL_AUDIO "global_audio"
-#define PRIV_GLOBAL_AUDIO_CHANNEL "global_audio_channel"
-
-static void SaveAudioDevice(const char *name, int channel, obs_data_t *parent)
+static void SaveAudioDevice(const char *name, int channel, obs_data_t *parent,
+		vector<OBSSource> &audioSources)
 {
 	obs_source_t *source = obs_get_output_source(channel);
 	if (!source)
 		return;
 
-	obs_data_t *priv = obs_data_create();
-	obs_data_set_bool(priv, PRIV_GLOBAL_AUDIO, true);
-	obs_data_set_int(priv, PRIV_GLOBAL_AUDIO_CHANNEL, channel);
-	obs_source_set_private_settings(source, priv);
-	obs_data_release(priv);
-
-	/* below still provided for backward compatibility */
+	audioSources.push_back(source);
 
 	obs_data_t *data = obs_save_source(source);
 
@@ -257,20 +248,34 @@ static obs_data_t *GenerateSaveData(obs_data_array_t *sceneOrder)
 {
 	obs_data_t *saveData = obs_data_create();
 
-	SaveAudioDevice(DESKTOP_AUDIO_1, 1, saveData);
-	SaveAudioDevice(DESKTOP_AUDIO_2, 2, saveData);
-	SaveAudioDevice(AUX_AUDIO_1,     3, saveData);
-	SaveAudioDevice(AUX_AUDIO_2,     4, saveData);
-	SaveAudioDevice(AUX_AUDIO_3,     5, saveData);
+	vector<OBSSource> audioSources;
+	audioSources.reserve(5);
 
-	obs_data_array_t *sourcesArray = obs_save_sources();
-	obs_source_t     *currentScene = obs_get_output_source(0);
-	const char       *sceneName   = obs_source_get_name(currentScene);
+	SaveAudioDevice(DESKTOP_AUDIO_1, 1, saveData, audioSources);
+	SaveAudioDevice(DESKTOP_AUDIO_2, 2, saveData, audioSources);
+	SaveAudioDevice(AUX_AUDIO_1,     3, saveData, audioSources);
+	SaveAudioDevice(AUX_AUDIO_2,     4, saveData, audioSources);
+	SaveAudioDevice(AUX_AUDIO_3,     5, saveData, audioSources);
+
+	auto FilterAudioSources = [&](obs_source_t *source)
+	{
+		return find(begin(audioSources), end(audioSources), source) ==
+				end(audioSources);
+	};
+	using FilterAudioSources_t = decltype(FilterAudioSources);
+
+	obs_data_array_t *sourcesArray = obs_save_sources_filtered(
+			[](void *data, obs_source_t *source)
+	{
+		return (*static_cast<FilterAudioSources_t*>(data))(source);
+	}, static_cast<void*>(&FilterAudioSources));
+
+	obs_source_t *currentScene = obs_get_output_source(0);
+	const char   *sceneName   = obs_source_get_name(currentScene);
 
 	const char *sceneCollection = config_get_string(App()->GlobalConfig(),
 			"Basic", "SceneCollection");
 
-	obs_data_set_int(saveData, "format_version", FORMAT_VERSION);
 	obs_data_set_string(saveData, "current_scene", sceneName);
 	obs_data_set_array(saveData, "scene_order", sceneOrder);
 	obs_data_set_string(saveData, "name", sceneCollection);
@@ -461,8 +466,6 @@ void OBSBasic::Load(const char *file)
 	const char       *sceneName = obs_data_get_string(data,
 			"current_scene");
 
-	int formatVer = (int)obs_data_get_int(data, "format_version");
-
 	const char *curSceneCollection = config_get_string(
 			App()->GlobalConfig(), "Basic", "SceneCollection");
 
@@ -474,13 +477,11 @@ void OBSBasic::Load(const char *file)
 	if (!name || !*name)
 		name = curSceneCollection;
 
-	if (formatVer == 0) {
-		LoadAudioDevice(DESKTOP_AUDIO_1, 1, data);
-		LoadAudioDevice(DESKTOP_AUDIO_2, 2, data);
-		LoadAudioDevice(AUX_AUDIO_1,     3, data);
-		LoadAudioDevice(AUX_AUDIO_2,     4, data);
-		LoadAudioDevice(AUX_AUDIO_3,     5, data);
-	}
+	LoadAudioDevice(DESKTOP_AUDIO_1, 1, data);
+	LoadAudioDevice(DESKTOP_AUDIO_2, 2, data);
+	LoadAudioDevice(AUX_AUDIO_1,     3, data);
+	LoadAudioDevice(AUX_AUDIO_2,     4, data);
+	LoadAudioDevice(AUX_AUDIO_3,     5, data);
 
 	obs_load_sources(sources);
 
@@ -1881,21 +1882,12 @@ void OBSBasic::SourceLoaded(void *data, calldata_t *params)
 {
 	OBSBasic *window = static_cast<OBSBasic*>(data);
 	obs_source_t *source = (obs_source_t*)calldata_ptr(params, "source");
-	obs_data_t *priv = obs_source_get_private_settings(source);
 
 	if (obs_scene_from_source(source) != NULL) {
 		QMetaObject::invokeMethod(window,
 				"AddScene",
 				Q_ARG(OBSSource, OBSSource(source)));
-
-	} else if (obs_data_get_bool(priv, PRIV_GLOBAL_AUDIO)) {
-		int channel = (int)obs_data_get_int(priv,
-				PRIV_GLOBAL_AUDIO_CHANNEL);
-
-		obs_set_output_source(channel, source);
 	}
-
-	obs_data_release(priv);
 }
 
 void OBSBasic::SourceRemoved(void *data, calldata_t *params)
