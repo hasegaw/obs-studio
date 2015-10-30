@@ -1882,11 +1882,10 @@ void OBSBasic::SourceLoaded(void *data, calldata_t *params)
 	OBSBasic *window = static_cast<OBSBasic*>(data);
 	obs_source_t *source = (obs_source_t*)calldata_ptr(params, "source");
 
-	if (obs_scene_from_source(source) != NULL) {
+	if (obs_scene_from_source(source) != NULL)
 		QMetaObject::invokeMethod(window,
 				"AddScene",
 				Q_ARG(OBSSource, OBSSource(source)));
-	}
 }
 
 void OBSBasic::SourceRemoved(void *data, calldata_t *params)
