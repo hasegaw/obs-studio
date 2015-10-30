@@ -1387,15 +1387,12 @@ static obs_source_t *obs_load_source_type(obs_data_t *source_data,
 	const char   *id      = obs_data_get_string(source_data, "id");
 	obs_data_t   *settings = obs_data_get_obj(source_data, "settings");
 	obs_data_t   *hotkeys  = obs_data_get_obj(source_data, "hotkeys");
-	obs_data_t   *priv     = obs_data_get_obj(source_data, "private");
 	double       volume;
 	int64_t      sync;
 	uint32_t     flags;
 	uint32_t     mixers;
 
 	source = obs_source_create(type, id, name, settings, hotkeys);
-	obs_source_set_private_settings(source, priv);
-	obs_data_release(priv);
 
 	obs_data_release(hotkeys);
 
@@ -1508,7 +1505,6 @@ obs_data_t *obs_save_source(obs_source_t *source)
 	obs_data_array_t *filters = obs_data_array_create();
 	obs_data_t *source_data = obs_data_create();
 	obs_data_t *settings    = obs_source_get_settings(source);
-	obs_data_t *priv        = obs_source_get_private_settings(source);
 	obs_data_t *hotkey_data = source->context.hotkey_data;
 	obs_data_t *hotkeys;
 	float      volume      = obs_source_get_volume(source);
@@ -1536,7 +1532,6 @@ obs_data_t *obs_save_source(obs_source_t *source)
 	obs_data_set_string(source_data, "name",     name);
 	obs_data_set_string(source_data, "id",       id);
 	obs_data_set_obj   (source_data, "settings", settings);
-	obs_data_set_obj   (source_data, "private",  priv);
 	obs_data_set_int   (source_data, "mixers",   mixers);
 	obs_data_set_int   (source_data, "sync",     sync);
 	obs_data_set_int   (source_data, "flags",    flags);
@@ -1564,7 +1559,6 @@ obs_data_t *obs_save_source(obs_source_t *source)
 
 	pthread_mutex_unlock(&source->filter_mutex);
 
-	obs_data_release(priv);
 	obs_data_release(settings);
 	obs_data_array_release(filters);
 
@@ -1639,7 +1633,6 @@ static inline bool obs_context_data_init_wrap(
 	context->name        = dup_name(name);
 	context->settings    = obs_data_newref(settings);
 	context->hotkey_data = obs_data_newref(hotkey_data);
-	context->private_settings = obs_data_create();
 	return true;
 }
 
@@ -1663,7 +1656,6 @@ void obs_context_data_free(struct obs_context_data *context)
 	signal_handler_destroy(context->signals);
 	proc_handler_destroy(context->procs);
 	obs_data_release(context->settings);
-	obs_data_release(context->private_settings);
 	obs_context_data_remove(context);
 	pthread_mutex_destroy(&context->rename_cache_mutex);
 	bfree(context->name);
