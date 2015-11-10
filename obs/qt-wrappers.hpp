@@ -42,5 +42,5 @@ QDataStream &operator>>(QDataStream &in,
 		std::vector<std::shared_ptr<OBSSignal>> &signal_vec);
 QDataStream &operator<<(QDataStream &out, const OBSScene &scene);
 QDataStream &operator>>(QDataStream &in, OBSScene &scene);
-QDataStream &operator<<(QDataStream &out, const OBSSceneItem &si);
-QDataStream &operator>>(QDataStream &in, OBSSceneItem &si);
+QDataStream &operator<<(QDataStream &out, const OBSInput &si);
+QDataStream &operator>>(QDataStream &in, OBSInput &si);

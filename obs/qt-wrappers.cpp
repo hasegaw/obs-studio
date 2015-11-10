@@ -108,15 +108,15 @@ QDataStream &operator>>(QDataStream &in, OBSScene &scene)
 	return in;
 }
 
-QDataStream &operator<<(QDataStream &out, const OBSSceneItem &si)
+QDataStream &operator<<(QDataStream &out, const OBSInput &si)
 {
-	obs_scene_t  *scene  = obs_sceneitem_get_scene(si);
-	obs_source_t *source = obs_sceneitem_get_source(si);
+	obs_scene_t  *scene  = obs_scene_from_parent(si);
+	obs_source_t *source = obs_input_get_source(si);
 	return out << QString(obs_source_get_name(obs_scene_get_source(scene)))
 		   << QString(obs_source_get_name(source));
 }
 
-QDataStream &operator>>(QDataStream &in, OBSSceneItem &si)
+QDataStream &operator>>(QDataStream &in, OBSInput &si)
 {
 	QString sceneName;
 	QString sourceName;

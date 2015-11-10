@@ -71,7 +71,7 @@ struct SignalContainer {
 }
 
 Q_DECLARE_METATYPE(OBSScene);
-Q_DECLARE_METATYPE(OBSSceneItem);
+Q_DECLARE_METATYPE(OBSInput);
 Q_DECLARE_METATYPE(OBSSource);
 Q_DECLARE_METATYPE(obs_order_movement);
 Q_DECLARE_METATYPE(SignalContainer<OBSScene>);
@@ -149,7 +149,7 @@ OBSBasic::OBSBasic(QWidget *parent)
 	}
 
 	qRegisterMetaType<OBSScene>    ("OBSScene");
-	qRegisterMetaType<OBSSceneItem>("OBSSceneItem");
+	qRegisterMetaType<OBSInput>("OBSInput");
 	qRegisterMetaType<OBSSource>   ("OBSSource");
 	qRegisterMetaType<obs_hotkey_id>("obs_hotkey_id");
 
@@ -157,7 +157,7 @@ OBSBasic::OBSBasic(QWidget *parent)
 		std::vector<std::shared_ptr<OBSSignal>>>(
 				"std::vector<std::shared_ptr<OBSSignal>>");
 	qRegisterMetaTypeStreamOperators<OBSScene>("OBSScene");
-	qRegisterMetaTypeStreamOperators<OBSSceneItem>("OBSSceneItem");
+	qRegisterMetaTypeStreamOperators<OBSInput>("OBSInput");
 
 	ui->scenes->setAttribute(Qt::WA_MacShowFocusRect, false);
 	ui->sources->setAttribute(Qt::WA_MacShowFocusRect, false);
@@ -1239,12 +1239,12 @@ OBSScene OBSBasic::GetCurrentScene()
 	return item ? GetOBSRef<OBSScene>(item) : nullptr;
 }
 
-OBSSceneItem OBSBasic::GetSceneItem(QListWidgetItem *item)
+OBSInput OBSBasic::GetSceneItem(QListWidgetItem *item)
 {
-	return item ? GetOBSRef<OBSSceneItem>(item) : nullptr;
+	return item ? GetOBSRef<OBSInput>(item) : nullptr;
 }
 
-OBSSceneItem OBSBasic::GetCurrentSceneItem()
+OBSInput OBSBasic::GetCurrentSceneItem()
 {
 	return GetSceneItem(ui->sources->currentItem());
 }
@@ -1254,7 +1254,7 @@ void OBSBasic::UpdateSources(OBSScene scene)
 	ClearListItems(ui->sources);
 
 	obs_scene_enum_items(scene,
-			[] (obs_scene_t *scene, obs_sceneitem_t *item, void *p)
+			[] (obs_scene_t *scene, obs_input_t *item, void *p)
 			{
 				OBSBasic *window = static_cast<OBSBasic*>(p);
 				window->InsertSceneItem(item);
@@ -1264,15 +1264,22 @@ void OBSBasic::UpdateSources(OBSScene scene)
 			}, this);
 }
 
-void OBSBasic::InsertSceneItem(obs_sceneitem_t *item)
+void OBSBasic::InsertSceneItem(obs_input_t *item)
 {
 	QListWidgetItem *listItem = new QListWidgetItem();
-	SetOBSRef(listItem, OBSSceneItem(item));
+	SetOBSRef(listItem, OBSInput(item));
 
 	ui->sources->insertItem(0, listItem);
 	ui->sources->setCurrentRow(0, QItemSelectionModel::ClearAndSelect);
 
 	SetupVisibilityItem(ui->sources, listItem, item);
+
+	SceneItemInfo *info = new SceneItemInfo;
+	obs_input_set_private_data(item, info,
+			[] (void *data)
+			{
+				delete reinterpret_cast<SceneItemInfo*>(data);
+			});
 }
 
 void OBSBasic::CreateInteractionWindow(obs_source_t *source)
@@ -1349,7 +1356,7 @@ void OBSBasic::AddScene(OBSSource source)
 			QVariant::fromValue(container));
 
 	/* if the scene already has items (a duplicated scene) add them */
-	auto addSceneItem = [this] (obs_sceneitem_t *item)
+	auto addSceneItem = [this] (obs_input_t *item)
 	{
 		AddSceneItem(item);
 	};
@@ -1357,7 +1364,7 @@ void OBSBasic::AddScene(OBSSource source)
 	using addSceneItem_t = decltype(addSceneItem);
 
 	obs_scene_enum_items(scene,
-			[] (obs_scene_t*, obs_sceneitem_t *item, void *param)
+			[] (obs_scene_t*, obs_input_t *item, void *param)
 			{
 				addSceneItem_t *func;
 				func = reinterpret_cast<addSceneItem_t*>(param);
@@ -1393,9 +1400,9 @@ void OBSBasic::RemoveScene(OBSSource source)
 	SaveProject();
 }
 
-void OBSBasic::AddSceneItem(OBSSceneItem item)
+void OBSBasic::AddSceneItem(OBSInput item)
 {
-	obs_scene_t  *scene  = obs_sceneitem_get_scene(item);
+	obs_scene_t *scene = obs_scene_from_parent(item);
 
 	if (GetCurrentScene() == scene)
 		InsertSceneItem(item);
@@ -1403,15 +1410,15 @@ void OBSBasic::AddSceneItem(OBSSceneItem item)
 	SaveProject();
 }
 
-void OBSBasic::RemoveSceneItem(OBSSceneItem item)
+void OBSBasic::RemoveSceneItem(OBSInput item)
 {
-	obs_scene_t *scene = obs_sceneitem_get_scene(item);
+	obs_scene_t *scene = obs_scene_from_parent(item);
 
 	if (GetCurrentScene() == scene) {
 		for (int i = 0; i < ui->sources->count(); i++) {
 			QListWidgetItem *listItem = ui->sources->item(i);
 
-			if (GetOBSRef<OBSSceneItem>(listItem) == item) {
+			if (GetOBSRef<OBSInput>(listItem) == item) {
 				DeleteListItem(ui->sources, listItem);
 				break;
 			}
@@ -1465,7 +1472,7 @@ void OBSBasic::RenameSources(QString newName, QString prevName)
 	SaveProject();
 }
 
-void OBSBasic::SelectSceneItem(OBSScene scene, OBSSceneItem item, bool select)
+void OBSBasic::SelectSceneItem(OBSScene scene, OBSInput item, bool select)
 {
 	if (scene != GetCurrentScene() || ignoreSelectionUpdate)
 		return;
@@ -1474,10 +1481,10 @@ void OBSBasic::SelectSceneItem(OBSScene scene, OBSSceneItem item, bool select)
 		QListWidgetItem *witem = ui->sources->item(i);
 		QVariant data =
 			witem->data(static_cast<int>(QtDataRole::OBSRef));
-		if (!data.canConvert<OBSSceneItem>())
+		if (!data.canConvert<OBSInput>())
 			continue;
 
-		if (item != data.value<OBSSceneItem>())
+		if (item != data.value<OBSInput>())
 			continue;
 
 		if (select)
@@ -1754,11 +1761,11 @@ void OBSBasic::RemoveSelectedScene()
 
 void OBSBasic::RemoveSelectedSceneItem()
 {
-	OBSSceneItem item = GetCurrentSceneItem();
+	OBSInput item = GetCurrentSceneItem();
 	if (item) {
-		obs_source_t *source = obs_sceneitem_get_source(item);
+		obs_source_t *source = obs_input_get_source(item);
 		if (QueryRemoveSource(source))
-			obs_sceneitem_remove(item);
+			obs_scene_remove(item);
 	}
 }
 
@@ -1769,14 +1776,14 @@ struct ReorderInfo {
 	inline ReorderInfo(OBSBasic *window_) : window(window_) {}
 };
 
-void OBSBasic::ReorderSceneItem(obs_sceneitem_t *item, size_t idx)
+void OBSBasic::ReorderSceneItem(obs_input_t *item, size_t idx)
 {
 	int count = ui->sources->count();
 	int idx_inv = count - (int)idx - 1;
 
 	for (int i = 0; i < count; i++) {
 		QListWidgetItem *listItem = ui->sources->item(i);
-		OBSSceneItem sceneItem = GetOBSRef<OBSSceneItem>(listItem);
+		OBSInput sceneItem = GetOBSRef<OBSInput>(listItem);
 
 		if (sceneItem == item) {
 			if ((int)idx_inv != i) {
@@ -1808,7 +1815,7 @@ void OBSBasic::ReorderSources(OBSScene scene)
 		return;
 
 	obs_scene_enum_items(scene,
-			[] (obs_scene_t*, obs_sceneitem_t *item, void *p)
+			[] (obs_scene_t*, obs_input_t *item, void *p)
 			{
 				ReorderInfo *info =
 					reinterpret_cast<ReorderInfo*>(p);
@@ -1837,20 +1844,20 @@ void OBSBasic::SceneItemAdded(void *data, calldata_t *params)
 {
 	OBSBasic *window = static_cast<OBSBasic*>(data);
 
-	obs_sceneitem_t *item = (obs_sceneitem_t*)calldata_ptr(params, "item");
+	obs_input_t *item = (obs_input_t*)calldata_ptr(params, "item");
 
 	QMetaObject::invokeMethod(window, "AddSceneItem",
-			Q_ARG(OBSSceneItem, OBSSceneItem(item)));
+			Q_ARG(OBSInput, OBSInput(item)));
 }
 
 void OBSBasic::SceneItemRemoved(void *data, calldata_t *params)
 {
 	OBSBasic *window = static_cast<OBSBasic*>(data);
 
-	obs_sceneitem_t *item = (obs_sceneitem_t*)calldata_ptr(params, "item");
+	obs_input_t *item = (obs_input_t*)calldata_ptr(params, "item");
 
 	QMetaObject::invokeMethod(window, "RemoveSceneItem",
-			Q_ARG(OBSSceneItem, OBSSceneItem(item)));
+			Q_ARG(OBSInput, OBSInput(item)));
 }
 
 void OBSBasic::SceneItemSelected(void *data, calldata_t *params)
@@ -1858,10 +1865,10 @@ void OBSBasic::SceneItemSelected(void *data, calldata_t *params)
 	OBSBasic *window = static_cast<OBSBasic*>(data);
 
 	obs_scene_t     *scene = (obs_scene_t*)calldata_ptr(params, "scene");
-	obs_sceneitem_t *item  = (obs_sceneitem_t*)calldata_ptr(params, "item");
+	obs_input_t *item  = (obs_input_t*)calldata_ptr(params, "item");
 
 	QMetaObject::invokeMethod(window, "SelectSceneItem",
-			Q_ARG(OBSScene, scene), Q_ARG(OBSSceneItem, item),
+			Q_ARG(OBSScene, scene), Q_ARG(OBSInput, item),
 			Q_ARG(bool, true));
 }
 
@@ -1870,10 +1877,10 @@ void OBSBasic::SceneItemDeselected(void *data, calldata_t *params)
 	OBSBasic *window = static_cast<OBSBasic*>(data);
 
 	obs_scene_t     *scene = (obs_scene_t*)calldata_ptr(params, "scene");
-	obs_sceneitem_t *item  = (obs_sceneitem_t*)calldata_ptr(params, "item");
+	obs_input_t *item  = (obs_input_t*)calldata_ptr(params, "item");
 
 	QMetaObject::invokeMethod(window, "SelectSceneItem",
-			Q_ARG(OBSScene, scene), Q_ARG(OBSSceneItem, item),
+			Q_ARG(OBSScene, scene), Q_ARG(OBSInput, item),
 			Q_ARG(bool, false));
 }
 
@@ -2553,12 +2560,12 @@ void OBSBasic::MoveSceneToBottom()
 void OBSBasic::on_sources_currentItemChanged(QListWidgetItem *current,
 		QListWidgetItem *prev)
 {
-	auto select_one = [] (obs_scene_t *scene, obs_sceneitem_t *item,
+	auto select_one = [] (obs_scene_t *scene, obs_input_t *item,
 			void *param)
 	{
-		obs_sceneitem_t *selectedItem =
-			*reinterpret_cast<OBSSceneItem*>(param);
-		obs_sceneitem_select(item, (selectedItem == item));
+		obs_input_t *selectedItem =
+			*reinterpret_cast<OBSInput*>(param);
+		ItemSelect(item, (selectedItem == item));
 
 		UNUSED_PARAMETER(scene);
 		return true;
@@ -2567,8 +2574,8 @@ void OBSBasic::on_sources_currentItemChanged(QListWidgetItem *current,
 	if (!current)
 		return;
 
-	OBSSceneItem item = GetOBSRef<OBSSceneItem>(current);
-	obs_source_t *source = obs_sceneitem_get_source(item);
+	OBSInput item = GetOBSRef<OBSInput>(current);
+	obs_source_t *source = obs_input_get_source(item);
 	if ((obs_source_get_output_flags(source) & OBS_SOURCE_VIDEO) == 0)
 		return;
 
@@ -2593,8 +2600,8 @@ void OBSBasic::EditSceneItemName()
 {
 	QListWidgetItem *item = ui->sources->currentItem();
 	Qt::ItemFlags flags   = item->flags();
-	OBSSceneItem sceneItem= GetOBSRef<OBSSceneItem>(item);
-	obs_source_t *source  = obs_sceneitem_get_source(sceneItem);
+	OBSInput sceneItem= GetOBSRef<OBSInput>(item);
+	obs_source_t *source  = obs_input_get_source(sceneItem);
 	const char *name      = obs_source_get_name(source);
 
 	item->setText(QT_UTF8(name));
@@ -2635,8 +2642,8 @@ void OBSBasic::CreateSourcePopupMenu(QListWidgetItem *item, bool preview)
 		if (addSourceMenu)
 			popup.addSeparator();
 
-		OBSSceneItem sceneItem = GetSceneItem(item);
-		obs_source_t *source = obs_sceneitem_get_source(sceneItem);
+		OBSInput sceneItem = GetSceneItem(item);
+		obs_source_t *source = obs_input_get_source(sceneItem);
 		QAction *action;
 
 		popup.addAction(QTStr("Rename"), this,
@@ -2681,8 +2688,8 @@ void OBSBasic::on_sources_itemDoubleClicked(QListWidgetItem *witem)
 	if (!witem)
 		return;
 
-	OBSSceneItem item = GetSceneItem(witem);
-	OBSSource source = obs_sceneitem_get_source(item);
+	OBSInput item = GetSceneItem(witem);
+	OBSSource source = obs_input_get_source(item);
 
 	if (source)
 		CreatePropertiesWindow(source);
@@ -2760,17 +2767,17 @@ void OBSBasic::on_actionAddSource_triggered()
 
 void OBSBasic::on_actionRemoveSource_triggered()
 {
-	OBSSceneItem item   = GetCurrentSceneItem();
-	obs_source_t *source = obs_sceneitem_get_source(item);
+	OBSInput item   = GetCurrentSceneItem();
+	obs_source_t *source = obs_input_get_source(item);
 
 	if (source && QueryRemoveSource(source))
-		obs_sceneitem_remove(item);
+		obs_scene_remove(item);
 }
 
 void OBSBasic::on_actionInteract_triggered()
 {
-	OBSSceneItem item = GetCurrentSceneItem();
-	OBSSource source = obs_sceneitem_get_source(item);
+	OBSInput item = GetCurrentSceneItem();
+	OBSSource source = obs_input_get_source(item);
 
 	if (source)
 		CreateInteractionWindow(source);
@@ -2778,8 +2785,8 @@ void OBSBasic::on_actionInteract_triggered()
 
 void OBSBasic::on_actionSourceProperties_triggered()
 {
-	OBSSceneItem item = GetCurrentSceneItem();
-	OBSSource source = obs_sceneitem_get_source(item);
+	OBSInput item = GetCurrentSceneItem();
+	OBSSource source = obs_input_get_source(item);
 
 	if (source)
 		CreatePropertiesWindow(source);
@@ -2787,38 +2794,38 @@ void OBSBasic::on_actionSourceProperties_triggered()
 
 void OBSBasic::on_actionSourceUp_triggered()
 {
-	OBSSceneItem item = GetCurrentSceneItem();
-	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_UP);
+	OBSInput item = GetCurrentSceneItem();
+	obs_scene_set_order(item, OBS_ORDER_MOVE_UP);
 }
 
 void OBSBasic::on_actionSourceDown_triggered()
 {
-	OBSSceneItem item = GetCurrentSceneItem();
-	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_DOWN);
+	OBSInput item = GetCurrentSceneItem();
+	obs_scene_set_order(item, OBS_ORDER_MOVE_DOWN);
 }
 
 void OBSBasic::on_actionMoveUp_triggered()
 {
-	OBSSceneItem item = GetCurrentSceneItem();
-	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_UP);
+	OBSInput item = GetCurrentSceneItem();
+	obs_scene_set_order(item, OBS_ORDER_MOVE_UP);
 }
 
 void OBSBasic::on_actionMoveDown_triggered()
 {
-	OBSSceneItem item = GetCurrentSceneItem();
-	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_DOWN);
+	OBSInput item = GetCurrentSceneItem();
+	obs_scene_set_order(item, OBS_ORDER_MOVE_DOWN);
 }
 
 void OBSBasic::on_actionMoveToTop_triggered()
 {
-	OBSSceneItem item = GetCurrentSceneItem();
-	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_TOP);
+	OBSInput item = GetCurrentSceneItem();
+	obs_scene_set_order(item, OBS_ORDER_MOVE_TOP);
 }
 
 void OBSBasic::on_actionMoveToBottom_triggered()
 {
-	OBSSceneItem item = GetCurrentSceneItem();
-	obs_sceneitem_set_order(item, OBS_ORDER_MOVE_BOTTOM);
+	OBSInput item = GetCurrentSceneItem();
+	obs_scene_set_order(item, OBS_ORDER_MOVE_BOTTOM);
 }
 
 static BPtr<char> ReadLogFile(const char *log)
@@ -3000,14 +3007,14 @@ void OBSBasic::SceneNameEdited(QWidget *editor,
 void OBSBasic::SceneItemNameEdited(QWidget *editor,
 		QAbstractItemDelegate::EndEditHint endHint)
 {
-	OBSSceneItem item  = GetCurrentSceneItem();
+	OBSInput item  = GetCurrentSceneItem();
 	QLineEdit    *edit = qobject_cast<QLineEdit*>(editor);
 	string       text  = QT_TO_UTF8(edit->text().trimmed());
 
 	if (!item)
 		return;
 
-	obs_source_t *source = obs_sceneitem_get_source(item);
+	obs_source_t *source = obs_input_get_source(item);
 	RenameListItem(this, ui->sources, source, text);
 
 	QListWidgetItem *listItem = ui->sources->currentItem();
@@ -3019,8 +3026,8 @@ void OBSBasic::SceneItemNameEdited(QWidget *editor,
 
 void OBSBasic::OpenFilters()
 {
-	OBSSceneItem item = GetCurrentSceneItem();
-	OBSSource source = obs_sceneitem_get_source(item);
+	OBSInput item = GetCurrentSceneItem();
+	OBSSource source = obs_input_get_source(item);
 
 	CreateFiltersWindow(source);
 }
@@ -3387,9 +3394,9 @@ void OBSBasic::on_actionEditTransform_triggered()
 
 void OBSBasic::on_actionResetTransform_triggered()
 {
-	auto func = [] (obs_scene_t *scene, obs_sceneitem_t *item, void *param)
+	auto func = [] (obs_scene_t *scene, obs_input_t *item, void *param)
 	{
-		if (!obs_sceneitem_selected(item))
+		if (!ItemSelected(item))
 			return true;
 
 		obs_transform_info info;
@@ -3400,7 +3407,7 @@ void OBSBasic::on_actionResetTransform_triggered()
 		info.bounds_type = OBS_BOUNDS_NONE;
 		info.bounds_alignment = OBS_ALIGN_CENTER;
 		vec2_set(&info.bounds, 0.0f, 0.0f);
-		obs_sceneitem_set_info(item, &info);
+		obs_input_set_transform_info(item, &info);
 
 		UNUSED_PARAMETER(scene);
 		UNUSED_PARAMETER(param);
@@ -3410,10 +3417,10 @@ void OBSBasic::on_actionResetTransform_triggered()
 	obs_scene_enum_items(GetCurrentScene(), func, nullptr);
 }
 
-static void GetItemBox(obs_sceneitem_t *item, vec3 &tl, vec3 &br)
+static void GetItemBox(obs_input_t *item, vec3 &tl, vec3 &br)
 {
 	matrix4 boxTransform;
-	obs_sceneitem_get_box_transform(item, &boxTransform);
+	obs_input_get_box_transform(item, &boxTransform);
 
 	vec3_set(&tl, M_INFINITE, M_INFINITE, 0.0f);
 	vec3_set(&br, -M_INFINITE, -M_INFINITE, 0.0f);
@@ -3433,39 +3440,39 @@ static void GetItemBox(obs_sceneitem_t *item, vec3 &tl, vec3 &br)
 	GetMinPos(1.0f, 1.0f);
 }
 
-static vec3 GetItemTL(obs_sceneitem_t *item)
+static vec3 GetItemTL(obs_input_t *item)
 {
 	vec3 tl, br;
 	GetItemBox(item, tl, br);
 	return tl;
 }
 
-static void SetItemTL(obs_sceneitem_t *item, const vec3 &tl)
+static void SetItemTL(obs_input_t *item, const vec3 &tl)
 {
 	vec3 newTL;
 	vec2 pos;
 
-	obs_sceneitem_get_pos(item, &pos);
+	obs_input_get_pos(item, &pos);
 	newTL = GetItemTL(item);
 	pos.x += tl.x - newTL.x;
 	pos.y += tl.y - newTL.y;
-	obs_sceneitem_set_pos(item, &pos);
+	obs_input_set_pos(item, &pos);
 }
 
-static bool RotateSelectedSources(obs_scene_t *scene, obs_sceneitem_t *item,
+static bool RotateSelectedSources(obs_scene_t *scene, obs_input_t *item,
 		void *param)
 {
-	if (!obs_sceneitem_selected(item))
+	if (!ItemSelected(item))
 		return true;
 
 	float rot = *reinterpret_cast<float*>(param);
 
 	vec3 tl = GetItemTL(item);
 
-	rot += obs_sceneitem_get_rot(item);
+	rot += obs_input_get_rot(item);
 	if (rot >= 360.0f)       rot -= 360.0f;
 	else if (rot <= -360.0f) rot += 360.0f;
-	obs_sceneitem_set_rot(item, rot);
+	obs_input_set_rot(item, rot);
 
 	SetItemTL(item, tl);
 
@@ -3492,20 +3499,20 @@ void OBSBasic::on_actionRotate180_triggered()
 	obs_scene_enum_items(GetCurrentScene(), RotateSelectedSources, &f180);
 }
 
-static bool MultiplySelectedItemScale(obs_scene_t *scene, obs_sceneitem_t *item,
+static bool MultiplySelectedItemScale(obs_scene_t *scene, obs_input_t *item,
 		void *param)
 {
 	vec2 &mul = *reinterpret_cast<vec2*>(param);
 
-	if (!obs_sceneitem_selected(item))
+	if (!ItemSelected(item))
 		return true;
 
 	vec3 tl = GetItemTL(item);
 
 	vec2 scale;
-	obs_sceneitem_get_scale(item, &scale);
+	obs_input_get_scale(item, &scale);
 	vec2_mul(&scale, &scale, &mul);
-	obs_sceneitem_set_scale(item, &scale);
+	obs_input_set_scale(item, &scale);
 
 	SetItemTL(item, tl);
 
@@ -3529,12 +3536,12 @@ void OBSBasic::on_actionFlipVertical_triggered()
 			&scale);
 }
 
-static bool CenterAlignSelectedItems(obs_scene_t *scene, obs_sceneitem_t *item,
+static bool CenterAlignSelectedItems(obs_scene_t *scene, obs_input_t *item,
 		void *param)
 {
 	obs_bounds_type boundsType = *reinterpret_cast<obs_bounds_type*>(param);
 
-	if (!obs_sceneitem_selected(item))
+	if (!ItemSelected(item))
 		return true;
 
 	obs_video_info ovi;
@@ -3551,7 +3558,7 @@ static bool CenterAlignSelectedItems(obs_scene_t *scene, obs_sceneitem_t *item,
 	itemInfo.bounds_type = boundsType;
 	itemInfo.bounds_alignment = OBS_ALIGN_CENTER;
 
-	obs_sceneitem_set_info(item, &itemInfo);
+	obs_input_set_transform_info(item, &itemInfo);
 
 	UNUSED_PARAMETER(scene);
 	return true;
@@ -3573,12 +3580,12 @@ void OBSBasic::on_actionStretchToScreen_triggered()
 
 void OBSBasic::on_actionCenterToScreen_triggered()
 {
-	auto func = [] (obs_scene_t *scene, obs_sceneitem_t *item, void *param)
+	auto func = [] (obs_scene_t *scene, obs_input_t *item, void *param)
 	{
 		vec3 tl, br, itemCenter, screenCenter, offset;
 		obs_video_info ovi;
 
-		if (!obs_sceneitem_selected(item))
+		if (!ItemSelected(item))
 			return true;
 
 		obs_get_video_info(&ovi);
@@ -3621,7 +3628,7 @@ void OBSBasic::Nudge(int dist, MoveDir dir)
 		MoveDir dir;
 	} info = {(float)dist, dir};
 
-	auto func = [] (obs_scene_t*, obs_sceneitem_t *item, void *param)
+	auto func = [] (obs_scene_t*, obs_input_t *item, void *param)
 	{
 		MoveInfo *info = reinterpret_cast<MoveInfo*>(param);
 		struct vec2 dir;
@@ -3629,7 +3636,7 @@ void OBSBasic::Nudge(int dist, MoveDir dir)
 
 		vec2_set(&dir, 0.0f, 0.0f);
 
-		if (!obs_sceneitem_selected(item))
+		if (!ItemSelected(item))
 			return true;
 
 		switch (info->dir) {
@@ -3639,9 +3646,9 @@ void OBSBasic::Nudge(int dist, MoveDir dir)
 		case MoveDir::Right: dir.x =  info->dist; break;
 		}
 
-		obs_sceneitem_get_pos(item, &pos);
+		obs_input_get_pos(item, &pos);
 		vec2_add(&pos, &pos, &dir);
-		obs_sceneitem_set_pos(item, &pos);
+		obs_input_set_pos(item, &pos);
 		return true;
 	};
 
@@ -3677,11 +3684,11 @@ void OBSBasic::OpenPreviewProjector()
 void OBSBasic::OpenSourceProjector()
 {
 	int monitor = sender()->property("monitor").toInt();
-	OBSSceneItem item = GetCurrentSceneItem();
+	OBSInput item = GetCurrentSceneItem();
 	if (!item)
 		return;
 
-	OpenProjector(obs_sceneitem_get_source(item), monitor);
+	OpenProjector(obs_input_get_source(item), monitor);
 }
 
 void OBSBasic::OpenSceneProjector()

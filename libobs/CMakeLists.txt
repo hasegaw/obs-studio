@@ -272,6 +272,7 @@ set(libobs_libobs_SOURCES
 	obs-module.c
 	obs-display.c
 	obs-view.c
+	obs-input.c
 	obs-scene.c
 	obs-video.c)
 set(libobs_libobs_HEADERS
@@ -290,7 +291,6 @@ set(libobs_libobs_HEADERS
 	obs-hotkey.h
 	obs-hotkeys.h
 	obs-module.h
-	obs-scene.h
 	obs-source.h
 	obs-output.h
 	obs-ffmpeg-compat.h

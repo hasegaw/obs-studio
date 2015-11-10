@@ -30,7 +30,7 @@ class OBSBasicPreview : public OBSQTDisplay {
 	Q_OBJECT
 
 private:
-	OBSSceneItem stretchItem;
+	OBSInput     stretchItem;
 	ItemHandle   stretchHandle = ItemHandle::None;
 	vec2         stretchItemSize;
 	matrix4      screenToItem;
@@ -43,10 +43,10 @@ private:
 	bool         mouseOverItems = false;
 
 	static vec2 GetMouseEventPos(QMouseEvent *event);
-	static bool DrawSelectedItem(obs_scene_t *scene, obs_sceneitem_t *item,
+	static bool DrawSelectedItem(obs_scene_t *scene, obs_input_t *item,
 		void *param);
 
-	static OBSSceneItem GetItemAtPos(const vec2 &pos, bool selectBelow);
+	static OBSInput GetItemAtPos(const vec2 &pos, bool selectBelow);
 	static bool SelectedAtPos(const vec2 &pos);
 
 	static void DoSelect(const vec2 &pos);

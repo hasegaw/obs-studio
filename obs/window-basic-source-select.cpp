@@ -87,10 +87,10 @@ void OBSBasicSourceSelect::SourceRemoved(OBSSource source)
 static void AddSource(void *_data, obs_scene_t *scene)
 {
 	AddSourceData *data = (AddSourceData *)_data;
-	obs_sceneitem_t *sceneitem;
+	obs_input_t *sceneitem;
 
 	sceneitem = obs_scene_add(scene, data->source);
-	obs_sceneitem_set_visible(sceneitem, data->visible);
+	obs_input_set_visible(sceneitem, data->visible);
 }
 
 static void AddExisting(const char *name, const bool visible)

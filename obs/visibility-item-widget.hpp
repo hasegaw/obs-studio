@@ -14,7 +14,7 @@ class VisibilityItemWidget : public QWidget {
 	Q_OBJECT
 
 private:
-	OBSSceneItem item;
+	OBSInput item;
 	OBSSource source;
 	QLabel *label = nullptr;
 	VisibilityCheckBox *vis = nullptr;
@@ -29,8 +29,8 @@ private:
 	bool selected = false;
 
 	static void OBSSceneRemove(void *param, calldata_t *data);
-	static void OBSSceneItemRemove(void *param, calldata_t *data);
-	static void OBSSceneItemVisible(void *param, calldata_t *data);
+	static void OBSInputRemove(void *param, calldata_t *data);
+	static void OBSInputVisible(void *param, calldata_t *data);
 	static void OBSSourceEnabled(void *param, calldata_t *data);
 	static void OBSSourceRenamed(void *param, calldata_t *data);
 
@@ -43,7 +43,7 @@ private slots:
 
 public:
 	VisibilityItemWidget(obs_source_t *source);
-	VisibilityItemWidget(obs_sceneitem_t *item);
+	VisibilityItemWidget(obs_input_t *item);
 	~VisibilityItemWidget();
 
 	void SetColor(const QColor &color, bool active, bool selected);
@@ -62,4 +62,4 @@ public:
 void SetupVisibilityItem(QListWidget *list, QListWidgetItem *item,
 		obs_source_t *source);
 void SetupVisibilityItem(QListWidget *list, QListWidgetItem *item,
-		obs_sceneitem_t *sceneItem);
+		obs_input_t *sceneItem);

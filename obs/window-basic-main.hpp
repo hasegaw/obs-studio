@@ -56,6 +56,26 @@ enum class QtDataRole {
 	OBSSignals,
 };
 
+struct SceneItemInfo {
+	bool selected = false;
+};
+
+static inline void ItemSelect(obs_input_t *item, bool select)
+{
+	void *data = obs_input_get_private_data(item);
+	if (!data) return;
+
+	reinterpret_cast<SceneItemInfo*>(data)->selected = select;
+}
+
+static inline bool ItemSelected(obs_input_t *item)
+{
+	void *data = obs_input_get_private_data(item);
+	if (!data) return false;
+
+	return reinterpret_cast<SceneItemInfo*>(data)->selected;
+}
+
 class OBSBasic : public OBSMainWindow {
 	Q_OBJECT
 
@@ -137,8 +157,8 @@ private:
 
 	void          InitPrimitives();
 
-	OBSSceneItem  GetSceneItem(QListWidgetItem *item);
-	OBSSceneItem  GetCurrentSceneItem();
+	OBSInput  GetSceneItem(QListWidgetItem *item);
+	OBSInput  GetCurrentSceneItem();
 
 	bool          QueryRemoveSource(obs_source_t *source);
 
@@ -152,7 +172,7 @@ private:
 	void GetConfigFPS(uint32_t &num, uint32_t &den) const;
 
 	void UpdateSources(OBSScene scene);
-	void InsertSceneItem(obs_sceneitem_t *item);
+	void InsertSceneItem(obs_input_t *item);
 
 	void LoadSceneListOrder(obs_data_array_t *array);
 	obs_data_array_t *SaveSceneListOrder();
@@ -214,14 +234,14 @@ public slots:
 	void SaveProject();
 
 private slots:
-	void AddSceneItem(OBSSceneItem item);
-	void RemoveSceneItem(OBSSceneItem item);
+	void AddSceneItem(OBSInput item);
+	void RemoveSceneItem(OBSInput item);
 	void AddScene(OBSSource source);
 	void RemoveScene(OBSSource source);
 	void UpdateSceneSelection(OBSSource source);
 	void RenameSources(QString newName, QString prevName);
 
-	void SelectSceneItem(OBSScene scene, OBSSceneItem item, bool select);
+	void SelectSceneItem(OBSScene scene, OBSInput item, bool select);
 
 	void ActivateAudioSource(OBSSource source);
 	void DeactivateAudioSource(OBSSource source);
@@ -293,7 +313,7 @@ public:
 	void SaveService();
 	bool LoadService();
 
-	void ReorderSceneItem(obs_sceneitem_t *item, size_t idx);
+	void ReorderSceneItem(obs_input_t *item, size_t idx);
 
 	void CreateSourcePopupMenu(QListWidgetItem *item, bool preview);
 

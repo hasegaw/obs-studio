@@ -28,8 +28,7 @@ class OBSRef;
 
 using OBSSource = OBSRef<obs_source_t*, obs_source_addref, obs_source_release>;
 using OBSScene = OBSRef<obs_scene_t*,  obs_scene_addref,  obs_scene_release>;
-using OBSSceneItem = OBSRef<obs_sceneitem_t*, obs_sceneitem_addref,
-						obs_sceneitem_release>;
+using OBSInput = OBSRef<obs_input_t*, obs_input_addref, obs_input_release>;
 using OBSData = OBSRef<obs_data_t*, obs_data_addref, obs_data_release>;
 using OBSDataArray = OBSRef<obs_data_array_t*, obs_data_array_addref,
 						obs_data_array_release>;

@@ -5,7 +5,7 @@
 #include "qt-wrappers.hpp"
 #include "source-list-widget.hpp"
 
-Q_DECLARE_METATYPE(OBSSceneItem);
+Q_DECLARE_METATYPE(OBSInput);
 
 void SourceListWidget::mouseDoubleClickEvent(QMouseEvent *event)
 {
@@ -21,10 +21,10 @@ void SourceListWidget::dropEvent(QDropEvent *event)
 
 	auto GetSceneItem = [&](int i)
 	{
-		return item(i)->data(Qt::UserRole).value<OBSSceneItem>();
+		return item(i)->data(Qt::UserRole).value<OBSInput>();
 	};
 
-	std::vector<obs_sceneitem_t*> newOrder;
+	std::vector<obs_input_t*> newOrder;
 	newOrder.reserve(count());
 	for (int i = count() - 1; i >= 0; i--)
 		newOrder.push_back(GetSceneItem(i));
@@ -38,7 +38,7 @@ void SourceListWidget::dropEvent(QDropEvent *event)
 	};
 	using UpdateOrderAtomically_t = decltype(UpdateOrderAtomically);
 
-	auto scene = obs_sceneitem_get_scene(GetSceneItem(0));
+	auto scene = obs_scene_from_parent(GetSceneItem(0));
 	obs_scene_atomic_update(scene, [](void *data, obs_scene_t *scene)
 	{
 		(*static_cast<UpdateOrderAtomically_t*>(data))(scene);

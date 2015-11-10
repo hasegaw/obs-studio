@@ -43,7 +43,7 @@ struct obs_display;
 struct obs_view;
 struct obs_source;
 struct obs_scene;
-struct obs_scene_item;
+struct obs_input;
 struct obs_output;
 struct obs_encoder;
 struct obs_service;
@@ -55,7 +55,7 @@ typedef struct obs_display    obs_display_t;
 typedef struct obs_view       obs_view_t;
 typedef struct obs_source     obs_source_t;
 typedef struct obs_scene      obs_scene_t;
-typedef struct obs_scene_item obs_sceneitem_t;
+typedef struct obs_input      obs_input_t;
 typedef struct obs_output     obs_output_t;
 typedef struct obs_encoder    obs_encoder_t;
 typedef struct obs_service    obs_service_t;
@@ -996,6 +996,78 @@ EXPORT uint32_t obs_source_get_base_height(obs_source_t *source);
 
 
 /* ------------------------------------------------------------------------- */
+/* Input */
+
+EXPORT obs_input_t *obs_input_create(obs_source_t *parent);
+EXPORT obs_input_t *obs_input_duplicate(obs_input_t *input,
+		obs_source_t *parent);
+
+EXPORT void obs_input_addref(obs_input_t *input);
+EXPORT void obs_input_release(obs_input_t *input);
+
+EXPORT obs_input_t *obs_input_get_ref(obs_input_t *input);
+
+/* This function should only be called by the parent of the input when it's
+ * being removed.  Detaches the input from the parent */
+EXPORT void obs_input_detach(obs_input_t *input);
+
+/* Checks to see if the source was removed */
+EXPORT bool obs_input_source_removed(const obs_input_t *input);
+
+EXPORT obs_source_t *obs_input_get_parent(const obs_input_t *input);
+
+EXPORT void obs_input_set_source(obs_input_t *input, obs_source_t *source);
+EXPORT obs_source_t *obs_input_get_source(const obs_input_t *input);
+
+EXPORT void obs_input_set_pos(obs_input_t *input, const struct vec2 *pos);
+EXPORT void obs_input_set_rot(obs_input_t *input, float rot_deg);
+EXPORT void obs_input_set_scale(obs_input_t *input, const struct vec2 *scale);
+EXPORT void obs_input_set_alignment(obs_input_t *input, uint32_t alignment);
+EXPORT void obs_input_set_bounds_type(obs_input_t *input,
+		enum obs_bounds_type type);
+EXPORT void obs_input_set_bounds_alignment(obs_input_t *input,
+		uint32_t alignment);
+EXPORT void obs_input_set_bounds(obs_input_t *input, const struct vec2 *bounds);
+
+EXPORT void  obs_input_get_pos(const obs_input_t *input, struct vec2 *pos);
+EXPORT float obs_input_get_rot(const obs_input_t *input);
+EXPORT void  obs_input_get_scale(const obs_input_t *input, struct vec2 *scale);
+EXPORT uint32_t obs_input_get_alignment(const obs_input_t *input);
+
+EXPORT enum obs_bounds_type obs_input_get_bounds_type(const obs_input_t *input);
+EXPORT uint32_t obs_input_get_bounds_alignment(const obs_input_t *input);
+EXPORT void obs_input_get_bounds(const obs_input_t *input, struct vec2 *bounds);
+
+EXPORT void obs_input_get_transform_info(const obs_input_t *input,
+		struct obs_transform_info *info);
+EXPORT void obs_input_set_transform_info(obs_input_t *input,
+		const struct obs_transform_info *info);
+
+EXPORT void obs_input_get_draw_transform(const obs_input_t *input,
+		struct matrix4 *transform);
+EXPORT void obs_input_get_box_transform(const obs_input_t *input,
+		struct matrix4 *transform);
+
+typedef void (*obs_input_destroy_data_t)(void *data);
+
+EXPORT void obs_input_set_parent_data(obs_input_t *input, void *data,
+		obs_input_destroy_data_t destroy_func);
+EXPORT void *obs_input_get_parent_data(const obs_input_t *input);
+
+EXPORT void obs_input_set_private_data(obs_input_t *input, void *data,
+		obs_input_destroy_data_t destroy_func);
+EXPORT void *obs_input_get_private_data(const obs_input_t *input);
+
+EXPORT bool obs_input_visible(const obs_input_t *input);
+EXPORT void obs_input_set_visible(obs_input_t *input, bool visible);
+
+EXPORT void obs_input_load(obs_input_t *input, obs_data_t *input_data);
+EXPORT void obs_input_save(obs_input_t *input, obs_data_t *input_data);
+
+EXPORT void obs_input_video_render(obs_input_t *input);
+
+
+/* ------------------------------------------------------------------------- */
 /* Scenes */
 
 /**
@@ -1023,83 +1095,32 @@ EXPORT obs_source_t *obs_scene_get_source(const obs_scene_t *scene);
 /** Gets the scene from its source, or NULL if not a scene */
 EXPORT obs_scene_t *obs_scene_from_source(const obs_source_t *source);
 
+/** Gets the scene from an item's parent, or NULL if not a scene's item */
+EXPORT obs_scene_t *obs_scene_from_parent(const obs_input_t *input);
+
 /** Determines whether a source is within a scene */
-EXPORT obs_sceneitem_t *obs_scene_find_source(obs_scene_t *scene,
-		const char *name);
+EXPORT obs_input_t *obs_scene_find_source(obs_scene_t *scene, const char *name);
 
 /** Enumerates sources within a scene */
 EXPORT void obs_scene_enum_items(obs_scene_t *scene,
-		bool (*callback)(obs_scene_t*, obs_sceneitem_t*, void*),
+		bool (*callback)(obs_scene_t*, obs_input_t*, void*),
 		void *param);
 
 EXPORT bool obs_scene_reorder_items(obs_scene_t *scene,
-		obs_sceneitem_t * const *item_order, size_t item_order_size);
+		obs_input_t *const *item_order, size_t item_order_size);
 
 /** Adds/creates a new scene item for a source */
-EXPORT obs_sceneitem_t *obs_scene_add(obs_scene_t *scene, obs_source_t *source);
+EXPORT obs_input_t *obs_scene_add(obs_scene_t *scene, obs_source_t *source);
+
+EXPORT void obs_scene_remove(obs_input_t *input);
+
+EXPORT void obs_scene_set_order(obs_input_t *input,
+		enum obs_order_movement movement);
+EXPORT void obs_scene_set_order_position(obs_input_t *input, int position);
 
 typedef void (*obs_scene_atomic_update_func)(void *, obs_scene_t *scene);
 EXPORT void obs_scene_atomic_update(obs_scene_t *scene,
 		obs_scene_atomic_update_func func, void *data);
-
-EXPORT void obs_sceneitem_addref(obs_sceneitem_t *item);
-EXPORT void obs_sceneitem_release(obs_sceneitem_t *item);
-
-/** Removes a scene item. */
-EXPORT void obs_sceneitem_remove(obs_sceneitem_t *item);
-
-/** Gets the scene parent associated with the scene item. */
-EXPORT obs_scene_t *obs_sceneitem_get_scene(const obs_sceneitem_t *item);
-
-/** Gets the source of a scene item. */
-EXPORT obs_source_t *obs_sceneitem_get_source(const obs_sceneitem_t *item);
-
-EXPORT void obs_sceneitem_select(obs_sceneitem_t *item, bool select);
-EXPORT bool obs_sceneitem_selected(const obs_sceneitem_t *item);
-
-/* Functions for gettings/setting specific orientation of a scene item */
-EXPORT void obs_sceneitem_set_pos(obs_sceneitem_t *item, const struct vec2 *pos);
-EXPORT void obs_sceneitem_set_rot(obs_sceneitem_t *item, float rot_deg);
-EXPORT void obs_sceneitem_set_scale(obs_sceneitem_t *item,
-		const struct vec2 *scale);
-EXPORT void obs_sceneitem_set_alignment(obs_sceneitem_t *item,
-		uint32_t alignment);
-EXPORT void obs_sceneitem_set_order(obs_sceneitem_t *item,
-		enum obs_order_movement movement);
-EXPORT void obs_sceneitem_set_order_position(obs_sceneitem_t *item,
-		int position);
-EXPORT void obs_sceneitem_set_bounds_type(obs_sceneitem_t *item,
-		enum obs_bounds_type type);
-EXPORT void obs_sceneitem_set_bounds_alignment(obs_sceneitem_t *item,
-		uint32_t alignment);
-EXPORT void obs_sceneitem_set_bounds(obs_sceneitem_t *item,
-		const struct vec2 *bounds);
-
-EXPORT void  obs_sceneitem_get_pos(const obs_sceneitem_t *item,
-		struct vec2 *pos);
-EXPORT float obs_sceneitem_get_rot(const obs_sceneitem_t *item);
-EXPORT void  obs_sceneitem_get_scale(const obs_sceneitem_t *item,
-		struct vec2 *scale);
-EXPORT uint32_t obs_sceneitem_get_alignment(const obs_sceneitem_t *item);
-
-EXPORT enum obs_bounds_type obs_sceneitem_get_bounds_type(
-		const obs_sceneitem_t *item);
-EXPORT uint32_t obs_sceneitem_get_bounds_alignment(const obs_sceneitem_t *item);
-EXPORT void obs_sceneitem_get_bounds(const obs_sceneitem_t *item,
-		struct vec2 *bounds);
-
-EXPORT void obs_sceneitem_get_info(const obs_sceneitem_t *item,
-		struct obs_transform_info *info);
-EXPORT void obs_sceneitem_set_info(obs_sceneitem_t *item,
-		const struct obs_transform_info *info);
-
-EXPORT void obs_sceneitem_get_draw_transform(const obs_sceneitem_t *item,
-		struct matrix4 *transform);
-EXPORT void obs_sceneitem_get_box_transform(const obs_sceneitem_t *item,
-		struct matrix4 *transform);
-
-EXPORT bool obs_sceneitem_visible(const obs_sceneitem_t *item);
-EXPORT void obs_sceneitem_set_visible(obs_sceneitem_t *item, bool visible);
 
 
 /* ------------------------------------------------------------------------- */

@@ -36,7 +36,7 @@ vec2 OBSBasicPreview::GetMouseEventPos(QMouseEvent *event)
 
 struct SceneFindData {
 	const vec2   &pos;
-	OBSSceneItem item;
+	OBSInput item;
 	bool         selectBelow;
 
 	SceneFindData(const SceneFindData &) = delete;
@@ -50,9 +50,9 @@ struct SceneFindData {
 	{}
 };
 
-static bool SceneItemHasVideo(obs_sceneitem_t *item)
+static bool SceneItemHasVideo(obs_input_t *item)
 {
-	obs_source_t *source = obs_sceneitem_get_source(item);
+	obs_source_t *source = obs_input_get_source(item);
 	uint32_t flags = obs_source_get_output_flags(source);
 	return (flags & OBS_SOURCE_VIDEO) != 0;
 }
@@ -63,7 +63,7 @@ static bool CloseFloat(float a, float b, float epsilon=0.01)
 	return abs(a-b) <= epsilon;
 }
 
-static bool FindItemAtPos(obs_scene_t *scene, obs_sceneitem_t *item,
+static bool FindItemAtPos(obs_scene_t *scene, obs_input_t *item,
 		void *param)
 {
 	SceneFindData *data = reinterpret_cast<SceneFindData*>(param);
@@ -78,7 +78,7 @@ static bool FindItemAtPos(obs_scene_t *scene, obs_sceneitem_t *item,
 
 	vec3_set(&pos3, data->pos.x, data->pos.y, 0.0f);
 
-	obs_sceneitem_get_box_transform(item, &transform);
+	obs_input_get_box_transform(item, &transform);
 
 	matrix4_inv(&invTransform, &transform);
 	vec3_transform(&transformedPos, &pos3, &invTransform);
@@ -87,7 +87,7 @@ static bool FindItemAtPos(obs_scene_t *scene, obs_sceneitem_t *item,
 	if (CloseFloat(pos3.x, pos3_.x) && CloseFloat(pos3.y, pos3_.y) &&
 	    transformedPos.x >= 0.0f && transformedPos.x <= 1.0f &&
 	    transformedPos.y >= 0.0f && transformedPos.y <= 1.0f) {
-		if (data->selectBelow && obs_sceneitem_selected(item)) {
+		if (data->selectBelow && ItemSelected(item)) {
 			if (data->item)
 				return false;
 			else
@@ -158,20 +158,20 @@ vec3 OBSBasicPreview::GetScreenSnapOffset(const vec3 &tl, const vec3 &br)
 	return clampOffset;
 }
 
-OBSSceneItem OBSBasicPreview::GetItemAtPos(const vec2 &pos, bool selectBelow)
+OBSInput OBSBasicPreview::GetItemAtPos(const vec2 &pos, bool selectBelow)
 {
 	OBSBasic *main = reinterpret_cast<OBSBasic*>(App()->GetMainWindow());
 
 	OBSScene scene = main->GetCurrentScene();
 	if (!scene)
-		return OBSSceneItem();
+		return OBSInput();
 
 	SceneFindData data(pos, selectBelow);
 	obs_scene_enum_items(scene, FindItemAtPos, &data);
 	return data.item;
 }
 
-static bool CheckItemSelected(obs_scene_t *scene, obs_sceneitem_t *item,
+static bool CheckItemSelected(obs_scene_t *scene, obs_input_t *item,
 		void *param)
 {
 	SceneFindData *data = reinterpret_cast<SceneFindData*>(param);
@@ -184,14 +184,14 @@ static bool CheckItemSelected(obs_scene_t *scene, obs_sceneitem_t *item,
 
 	vec3_set(&pos3, data->pos.x, data->pos.y, 0.0f);
 
-	obs_sceneitem_get_box_transform(item, &transform);
+	obs_input_get_box_transform(item, &transform);
 
 	matrix4_inv(&transform, &transform);
 	vec3_transform(&transformedPos, &pos3, &transform);
 
 	if (transformedPos.x >= 0.0f && transformedPos.x <= 1.0f &&
 	    transformedPos.y >= 0.0f && transformedPos.y <= 1.0f) {
-		if (obs_sceneitem_selected(item)) {
+		if (ItemSelected(item)) {
 			data->item = item;
 			return false;
 		}
@@ -218,7 +218,7 @@ struct HandleFindData {
 	const vec2   &pos;
 	const float  scale;
 
-	OBSSceneItem item;
+	OBSInput item;
 	ItemHandle   handle = ItemHandle::None;
 
 	HandleFindData(const HandleFindData &) = delete;
@@ -232,10 +232,10 @@ struct HandleFindData {
 	{}
 };
 
-static bool FindHandleAtPos(obs_scene_t *scene, obs_sceneitem_t *item,
+static bool FindHandleAtPos(obs_scene_t *scene, obs_input_t *item,
 		void *param)
 {
-	if (!obs_sceneitem_selected(item))
+	if (!ItemSelected(item))
 		return true;
 
 	HandleFindData *data = reinterpret_cast<HandleFindData*>(param);
@@ -245,7 +245,7 @@ static bool FindHandleAtPos(obs_scene_t *scene, obs_sceneitem_t *item,
 
 	vec3_set(&pos3, data->pos.x, data->pos.y, 0.0f);
 
-	obs_sceneitem_get_box_transform(item, &transform);
+	obs_input_get_box_transform(item, &transform);
 
 	auto TestHandle = [&] (float x, float y, ItemHandle handle)
 	{
@@ -275,18 +275,18 @@ static bool FindHandleAtPos(obs_scene_t *scene, obs_sceneitem_t *item,
 	return true;
 }
 
-static vec2 GetItemSize(obs_sceneitem_t *item)
+static vec2 GetItemSize(obs_input_t *item)
 {
-	obs_bounds_type boundsType = obs_sceneitem_get_bounds_type(item);
+	obs_bounds_type boundsType = obs_input_get_bounds_type(item);
 	vec2 size;
 
 	if (boundsType != OBS_BOUNDS_NONE) {
-		obs_sceneitem_get_bounds(item, &size);
+		obs_input_get_bounds(item, &size);
 	} else {
-		obs_source_t *source = obs_sceneitem_get_source(item);
+		obs_source_t *source = obs_input_get_source(item);
 		vec2 scale;
 
-		obs_sceneitem_get_scale(item, &scale);
+		obs_input_get_scale(item, &scale);
 		size.x = float(obs_source_get_width(source))  * scale.x;
 		size.y = float(obs_source_get_height(source)) * scale.y;
 	}
@@ -315,8 +315,8 @@ void OBSBasicPreview::GetStretchHandleData(const vec2 &pos)
 
 		stretchItemSize = GetItemSize(stretchItem);
 
-		obs_sceneitem_get_box_transform(stretchItem, &boxTransform);
-		itemRot = obs_sceneitem_get_rot(stretchItem);
+		obs_input_get_box_transform(stretchItem, &boxTransform);
+		itemRot = obs_input_get_rot(stretchItem);
 		vec3_from_vec4(&itemUL, &boxTransform.t);
 
 		/* build the item space conversion matrices */
@@ -364,11 +364,11 @@ void OBSBasicPreview::mousePressEvent(QMouseEvent *event)
 		ProcessClick(startPos);
 }
 
-static bool select_one(obs_scene_t *scene, obs_sceneitem_t *item, void *param)
+static bool select_one(obs_scene_t *scene, obs_input_t *item, void *param)
 {
-	obs_sceneitem_t *selectedItem =
-		reinterpret_cast<obs_sceneitem_t*>(param);
-	obs_sceneitem_select(item, (selectedItem == item));
+	obs_input_t *selectedItem =
+		reinterpret_cast<obs_input_t*>(param);
+	ItemSelect(item, (selectedItem == item));
 
 	UNUSED_PARAMETER(scene);
 	return true;
@@ -379,19 +379,19 @@ void OBSBasicPreview::DoSelect(const vec2 &pos)
 	OBSBasic *main = reinterpret_cast<OBSBasic*>(App()->GetMainWindow());
 
 	OBSScene     scene = main->GetCurrentScene();
-	OBSSceneItem item  = GetItemAtPos(pos, true);
+	OBSInput     item  = GetItemAtPos(pos, true);
 
-	obs_scene_enum_items(scene, select_one, (obs_sceneitem_t*)item);
+	obs_scene_enum_items(scene, select_one, (obs_input_t*)item);
 }
 
 void OBSBasicPreview::DoCtrlSelect(const vec2 &pos)
 {
-	OBSSceneItem item = GetItemAtPos(pos, false);
+	OBSInput item = GetItemAtPos(pos, false);
 	if (!item)
 		return;
 
-	bool selected = obs_sceneitem_selected(item);
-	obs_sceneitem_select(item, !selected);
+	bool selected = ItemSelected(item);
+	ItemSelect(item, !selected);
 }
 
 void OBSBasicPreview::ProcessClick(const vec2 &pos)
@@ -423,16 +423,16 @@ struct SelectedItemBounds {
 	vec3 tl, br;
 };
 
-static bool AddItemBounds(obs_scene_t *scene, obs_sceneitem_t *item,
+static bool AddItemBounds(obs_scene_t *scene, obs_input_t *item,
 		void *param)
 {
 	SelectedItemBounds *data = reinterpret_cast<SelectedItemBounds*>(param);
 
-	if (!obs_sceneitem_selected(item))
+	if (!ItemSelected(item))
 		return true;
 
 	matrix4 boxTransform;
-	obs_sceneitem_get_box_transform(item, &boxTransform);
+	obs_input_get_box_transform(item, &boxTransform);
 
 	vec3 t[4] = {
 		GetTransformedPos(0.0f, 0.0f, boxTransform),
@@ -474,15 +474,15 @@ void OBSBasicPreview::SnapItemMovement(vec2 &offset)
 	offset.y += snapOffset.y;
 }
 
-static bool move_items(obs_scene_t *scene, obs_sceneitem_t *item, void *param)
+static bool move_items(obs_scene_t *scene, obs_input_t *item, void *param)
 {
 	vec2 *offset = reinterpret_cast<vec2*>(param);
 
-	if (obs_sceneitem_selected(item)) {
+	if (ItemSelected(item)) {
 		vec2 pos;
-		obs_sceneitem_get_pos(item, &pos);
+		obs_input_get_pos(item, &pos);
 		vec2_add(&pos, &pos, offset);
-		obs_sceneitem_set_pos(item, &pos);
+		obs_input_set_pos(item, &pos);
 	}
 
 	UNUSED_PARAMETER(scene);
@@ -509,7 +509,7 @@ void OBSBasicPreview::MoveItems(const vec2 &pos)
 
 vec3 OBSBasicPreview::CalculateStretchPos(const vec3 &tl, const vec3 &br)
 {
-	uint32_t alignment = obs_sceneitem_get_alignment(stretchItem);
+	uint32_t alignment = obs_input_get_alignment(stretchItem);
 	vec3 pos;
 
 	vec3_zero(&pos);
@@ -609,7 +609,7 @@ void OBSBasicPreview::SnapStretchingToScreen(vec3 &tl, vec3 &br)
 void OBSBasicPreview::StretchItem(const vec2 &pos)
 {
 	Qt::KeyboardModifiers modifiers = QGuiApplication::keyboardModifiers();
-	obs_bounds_type boundsType = obs_sceneitem_get_bounds_type(stretchItem);
+	obs_bounds_type boundsType = obs_input_get_bounds_type(stretchItem);
 	uint32_t stretchFlags = (uint32_t)stretchHandle;
 	bool shiftDown = (modifiers & Qt::ShiftModifier);
 	vec3 tl, br, pos3;
@@ -633,7 +633,7 @@ void OBSBasicPreview::StretchItem(const vec2 &pos)
 	if (!(modifiers & Qt::ControlModifier))
 		SnapStretchingToScreen(tl, br);
 
-	obs_source_t *source = obs_sceneitem_get_source(stretchItem);
+	obs_source_t *source = obs_input_get_source(stretchItem);
 
 	vec2 baseSize;
 	vec2_set(&baseSize,
@@ -652,13 +652,13 @@ void OBSBasicPreview::StretchItem(const vec2 &pos)
 
 		vec2_abs(&size, &size);
 
-		obs_sceneitem_set_bounds(stretchItem, &size);
+		obs_input_set_bounds(stretchItem, &size);
 	} else {
 		if (!shiftDown)
 			ClampAspect(tl, br, size, baseSize);
 
 		vec2_div(&size, &size, &baseSize);
-		obs_sceneitem_set_scale(stretchItem, &size);
+		obs_input_set_scale(stretchItem, &size);
 	}
 
 	pos3 = CalculateStretchPos(tl, br);
@@ -666,7 +666,7 @@ void OBSBasicPreview::StretchItem(const vec2 &pos)
 
 	vec2 newPos;
 	vec2_set(&newPos, std::round(pos3.x), std::round(pos3.y));
-	obs_sceneitem_set_pos(stretchItem, &newPos);
+	obs_input_set_pos(stretchItem, &newPos);
 }
 
 void OBSBasicPreview::mouseMoveEvent(QMouseEvent *event)
@@ -708,16 +708,16 @@ static void DrawCircleAtPos(float x, float y, matrix4 &matrix,
 }
 
 bool OBSBasicPreview::DrawSelectedItem(obs_scene_t *scene,
-		obs_sceneitem_t *item, void *param)
+		obs_input_t *item, void *param)
 {
-	if (!obs_sceneitem_selected(item))
+	if (!ItemSelected(item))
 		return true;
 
 	OBSBasic *main = reinterpret_cast<OBSBasic*>(App()->GetMainWindow());
 
 	matrix4 boxTransform;
 	matrix4 invBoxTransform;
-	obs_sceneitem_get_box_transform(item, &boxTransform);
+	obs_input_get_box_transform(item, &boxTransform);
 	matrix4_inv(&invBoxTransform, &boxTransform);
 
 	vec3 bounds[] = {

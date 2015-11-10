@@ -1,15 +1,15 @@
 #include "window-basic-transform.hpp"
 #include "window-basic-main.hpp"
 
-Q_DECLARE_METATYPE(OBSSceneItem);
+Q_DECLARE_METATYPE(OBSInput);
 
-static OBSSceneItem FindASelectedItem(OBSScene scene)
+static OBSInput FindASelectedItem(OBSScene scene)
 {
-	auto func = [] (obs_scene_t *scene, obs_sceneitem_t *item, void *param)
+	auto func = [] (obs_scene_t *scene, obs_input_t *item, void *param)
 	{
-		OBSSceneItem &dst = *reinterpret_cast<OBSSceneItem*>(param);
+		OBSInput &dst = *reinterpret_cast<OBSInput*>(param);
 
-		if (obs_sceneitem_selected(item)) {
+		if (ItemSelected(item)) {
 			dst = item;
 			return false;
 		}
@@ -18,7 +18,7 @@ static OBSSceneItem FindASelectedItem(OBSScene scene)
 		return true;
 	};
 
-	OBSSceneItem item;
+	OBSInput item;
 	obs_scene_enum_items(scene, func, &item);
 	return item;
 }
@@ -72,23 +72,23 @@ void OBSBasicTransform::SetScene(OBSScene scene)
 		signal_handler_t *signal = obs_source_get_signal_handler(source);
 
 		transformSignal.Connect(signal, "item_transform",
-				OBSSceneItemTransform, this);
+				OBSInputTransform, this);
 		removeSignal.Connect(signal, "item_remove",
-				OBSSceneItemRemoved, this);
+				OBSInputRemoved, this);
 		selectSignal.Connect(signal, "item_select",
-				OBSSceneItemSelect, this);
+				OBSInputSelect, this);
 		deselectSignal.Connect(signal, "item_deselect",
-				OBSSceneItemDeselect, this);
+				OBSInputDeselect, this);
 	}
 }
 
-void OBSBasicTransform::SetItem(OBSSceneItem newItem)
+void OBSBasicTransform::SetItem(OBSInput newItem)
 {
 	QMetaObject::invokeMethod(this, "SetItemQt",
-			Q_ARG(OBSSceneItem, OBSSceneItem(newItem)));
+			Q_ARG(OBSInput, OBSInput(newItem)));
 }
 
-void OBSBasicTransform::SetItemQt(OBSSceneItem newItem)
+void OBSBasicTransform::SetItemQt(OBSInput newItem)
 {
 	item = newItem;
 	if (item)
@@ -114,39 +114,39 @@ void OBSBasicTransform::OBSChannelChanged(void *param, calldata_t *data)
 	}
 }
 
-void OBSBasicTransform::OBSSceneItemTransform(void *param, calldata_t *data)
+void OBSBasicTransform::OBSInputTransform(void *param, calldata_t *data)
 {
 	OBSBasicTransform *window = reinterpret_cast<OBSBasicTransform*>(param);
-	OBSSceneItem item = (obs_sceneitem_t*)calldata_ptr(data, "item");
+	OBSInput item = (obs_input_t*)calldata_ptr(data, "item");
 
 	if (item == window->item && !window->ignoreTransformSignal)
 		QMetaObject::invokeMethod(window, "RefreshControls");
 }
 
-void OBSBasicTransform::OBSSceneItemRemoved(void *param, calldata_t *data)
+void OBSBasicTransform::OBSInputRemoved(void *param, calldata_t *data)
 {
 	OBSBasicTransform *window = reinterpret_cast<OBSBasicTransform*>(param);
 	OBSScene     scene = (obs_scene_t*)calldata_ptr(data, "scene");
-	OBSSceneItem item = (obs_sceneitem_t*)calldata_ptr(data, "item");
+	OBSInput     item = (obs_input_t*)calldata_ptr(data, "item");
 
 	if (item == window->item)
 		window->SetItem(FindASelectedItem(scene));
 }
 
-void OBSBasicTransform::OBSSceneItemSelect(void *param, calldata_t *data)
+void OBSBasicTransform::OBSInputSelect(void *param, calldata_t *data)
 {
 	OBSBasicTransform *window = reinterpret_cast<OBSBasicTransform*>(param);
-	OBSSceneItem item  = (obs_sceneitem_t*)calldata_ptr(data, "item");
+	OBSInput item = (obs_input_t*)calldata_ptr(data, "item");
 
 	if (item != window->item)
 		window->SetItem(item);
 }
 
-void OBSBasicTransform::OBSSceneItemDeselect(void *param, calldata_t *data)
+void OBSBasicTransform::OBSInputDeselect(void *param, calldata_t *data)
 {
 	OBSBasicTransform *window = reinterpret_cast<OBSBasicTransform*>(param);
 	OBSScene     scene = (obs_scene_t*)calldata_ptr(data, "scene");
-	OBSSceneItem item  = (obs_sceneitem_t*)calldata_ptr(data, "item");
+	OBSInput     item  = (obs_input_t*)calldata_ptr(data, "item");
 
 	if (item == window->item)
 		window->SetItem(FindASelectedItem(scene));
@@ -183,9 +183,9 @@ void OBSBasicTransform::RefreshControls()
 		return;
 
 	obs_transform_info osi;
-	obs_sceneitem_get_info(item, &osi);
+	obs_input_get_transform_info(item, &osi);
 
-	obs_source_t *source = obs_sceneitem_get_source(item);
+	obs_source_t *source = obs_input_get_source(item);
 	float width  = float(obs_source_get_width(source));
 	float height = float(obs_source_get_height(source));
 
@@ -220,9 +220,9 @@ void OBSBasicTransform::OnBoundsType(int index)
 	ui->boundsHeight->setEnabled(enable);
 
 	if (!ignoreItemChange) {
-		obs_bounds_type lastType = obs_sceneitem_get_bounds_type(item);
+		obs_bounds_type lastType = obs_input_get_bounds_type(item);
 		if (lastType == OBS_BOUNDS_NONE) {
-			OBSSource source = obs_sceneitem_get_source(item);
+			OBSSource source = obs_input_get_source(item);
 			int width  = (int)obs_source_get_width(source);
 			int height = (int)obs_source_get_height(source);
 
@@ -239,7 +239,7 @@ void OBSBasicTransform::OnControlChanged()
 	if (ignoreItemChange)
 		return;
 
-	obs_source_t *source = obs_sceneitem_get_source(item);
+	obs_source_t *source = obs_input_get_source(item);
 	double width  = double(obs_source_get_width(source));
 	double height = double(obs_source_get_height(source));
 
@@ -257,6 +257,6 @@ void OBSBasicTransform::OnControlChanged()
 	oti.bounds.y         = float(ui->boundsHeight->value());
 
 	ignoreTransformSignal = true;
-	obs_sceneitem_set_info(item, &oti);
+	obs_input_set_transform_info(item, &oti);
 	ignoreTransformSignal = false;
 }

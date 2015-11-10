@@ -41,16 +41,15 @@ VisibilityItemWidget::VisibilityItemWidget(obs_source_t *source_)
 			this, SLOT(VisibilityClicked(bool)));
 }
 
-VisibilityItemWidget::VisibilityItemWidget(obs_sceneitem_t *item_)
+VisibilityItemWidget::VisibilityItemWidget(obs_input_t *item_)
 	: item          (item_),
-	  source        (obs_sceneitem_get_source(item)),
+	  source        (obs_input_get_source(item)),
 	  renamedSignal (obs_source_get_signal_handler(source), "rename",
 	                 OBSSourceRenamed, this)
 {
 	const char *name = obs_source_get_name(source);
-	bool enabled = obs_sceneitem_visible(item);
-	obs_scene_t *scene = obs_sceneitem_get_scene(item);
-	obs_source_t *sceneSource = obs_scene_get_source(scene);
+	bool enabled = obs_input_visible(item);
+	obs_source_t *sceneSource = obs_input_get_parent(item);
 
 	vis = new VisibilityCheckBox();
 	vis->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
@@ -73,9 +72,9 @@ VisibilityItemWidget::VisibilityItemWidget(obs_sceneitem_t *item_)
 
 	signal_handler_t *signal = obs_source_get_signal_handler(sceneSource);
 	signal_handler_connect(signal, "remove", OBSSceneRemove, this);
-	signal_handler_connect(signal, "item_remove", OBSSceneItemRemove,
+	signal_handler_connect(signal, "item_remove", OBSInputRemove,
 			this);
-	signal_handler_connect(signal, "item_visible", OBSSceneItemVisible,
+	signal_handler_connect(signal, "item_visible", OBSInputVisible,
 			this);
 
 	connect(vis, SIGNAL(clicked(bool)),
@@ -92,14 +91,13 @@ void VisibilityItemWidget::DisconnectItemSignals()
 	if (!item || sceneRemoved)
 		return;
 
-	obs_scene_t *scene = obs_sceneitem_get_scene(item);
-	obs_source_t *sceneSource = obs_scene_get_source(scene);
+	obs_source_t *sceneSource = obs_input_get_parent(item);
 	signal_handler_t *signal = obs_source_get_signal_handler(sceneSource);
 
 	signal_handler_disconnect(signal, "remove", OBSSceneRemove, this);
-	signal_handler_disconnect(signal, "item_remove", OBSSceneItemRemove,
+	signal_handler_disconnect(signal, "item_remove", OBSInputRemove,
 			this);
-	signal_handler_disconnect(signal, "item_visible", OBSSceneItemVisible,
+	signal_handler_disconnect(signal, "item_visible", OBSInputVisible,
 			this);
 
 	sceneRemoved = true;
@@ -115,21 +113,21 @@ void VisibilityItemWidget::OBSSceneRemove(void *param, calldata_t *data)
 	UNUSED_PARAMETER(data);
 }
 
-void VisibilityItemWidget::OBSSceneItemRemove(void *param, calldata_t *data)
+void VisibilityItemWidget::OBSInputRemove(void *param, calldata_t *data)
 {
 	VisibilityItemWidget *window =
 		reinterpret_cast<VisibilityItemWidget*>(param);
-	obs_sceneitem_t *item = (obs_sceneitem_t*)calldata_ptr(data, "item");
+	obs_input_t *item = (obs_input_t*)calldata_ptr(data, "item");
 
 	if (item == window->item)
 		window->DisconnectItemSignals();
 }
 
-void VisibilityItemWidget::OBSSceneItemVisible(void *param, calldata_t *data)
+void VisibilityItemWidget::OBSInputVisible(void *param, calldata_t *data)
 {
 	VisibilityItemWidget *window =
 		reinterpret_cast<VisibilityItemWidget*>(param);
-	obs_sceneitem_t *curItem = (obs_sceneitem_t*)calldata_ptr(data, "item");
+	obs_input_t *curItem = (obs_input_t*)calldata_ptr(data, "item");
 	bool enabled = calldata_bool(data, "visible");
 
 	if (window->item == curItem)
@@ -160,7 +158,7 @@ void VisibilityItemWidget::OBSSourceRenamed(void *param, calldata_t *data)
 void VisibilityItemWidget::VisibilityClicked(bool visible)
 {
 	if (item)
-		obs_sceneitem_set_visible(item, visible);
+		obs_input_set_visible(item, visible);
 	else
 		obs_source_set_enabled(source, visible);
 }
@@ -253,7 +251,7 @@ void SetupVisibilityItem(QListWidget *list, QListWidgetItem *item,
 }
 
 void SetupVisibilityItem(QListWidget *list, QListWidgetItem *item,
-		obs_sceneitem_t *sceneItem)
+		obs_input_t *sceneItem)
 {
 	VisibilityItemWidget *baseWidget = new VisibilityItemWidget(sceneItem);
 
