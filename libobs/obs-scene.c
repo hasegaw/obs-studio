@@ -484,7 +484,7 @@ void obs_scene_remove(obs_input_t *input)
 
 	signal_item_remove(input);
 	obs_input_detach(input);
-	da_erase_item(scene->items, input);
+	da_erase_item(scene->items, &input);
 
 	pthread_mutex_unlock(&scene->mutex);
 }
