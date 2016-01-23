@@ -1,5 +1,8 @@
 project(obs-filters)
 
+find_package(FFmpeg REQUIRED
+	COMPONENTS avcodec avfilter avdevice avutil swscale avformat swresample)
+
 set(obs-filters_SOURCES
 	obs-filters.c
 	color-filter.c
@@ -17,6 +20,6 @@ set(obs-filters_SOURCES
 add_library(obs-filters MODULE
 	${obs-filters_SOURCES})
 target_link_libraries(obs-filters
-	libobs vncserver)
+	libobs vncserver avcodec swscale avutil)
 
 install_obs_plugin_with_data(obs-filters data)
