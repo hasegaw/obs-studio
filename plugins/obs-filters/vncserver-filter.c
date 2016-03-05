@@ -6,6 +6,11 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <rfb/rfb.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <sys/shm.h>
+#include <sys/mman.h>
+
 
 #include <libavutil/opt.h>
 #include <libavformat/avformat.h>
@@ -36,6 +41,8 @@ struct vncpreview_filter_data {
     int                             destroy;
 
 	struct SwsContext  *swscale;
+    char *shm_fb;
+    int shm_fd;
 };
 
 const char *vncpreview_filter_name(void *unused)
@@ -70,7 +77,7 @@ static void vncpreview_filter_destroy(void *data)
 
     if (filter->thread) {
         filter->destroy = 1;
-        pthread_join(filter->thread, NULL);
+        // pthread_join(filter->thread, NULL);
     }
 
 //	if (filter->effect) {
@@ -137,6 +144,20 @@ static void vncserver_render_callback(void *param, struct video_data *frame)
         filter->dst_picture.linesize
     );
 
+    if ( filter->shm_fb) {
+#if 1
+
+        int y;
+        for (y = 0; y < 720; y++) {
+            char *src = (char*)filter->fb + (y * filter->dst_picture.linesize[0]);
+            char *dest = (char*) filter->shm_fb + y * (1280 * 4);
+            memcpy(dest, src, 1280*4);
+        }
+#endif
+        // memcpy(filter->shm_fb, frame->data, (1280*720*4));
+
+    }
+
     filter->update = 1;
 
     pthread_mutex_unlock(&filter->fb_mutex);
@@ -167,6 +188,15 @@ static void vncserver_init_video(struct vncpreview_filter_data *filter)
     } else {
         printf("vncserver-filter: Failed to connect\n");
     }
+
+    const char *IKALOG_SHM_NAME="IKALOG_FB";
+    const int IKALOG_SHM_SIZE=1280*720*4;
+
+    filter->shm_fd = shm_open(IKALOG_SHM_NAME, O_CREAT | O_RDWR, 0666);
+    ftruncate(filter->shm_fd, IKALOG_SHM_SIZE);
+
+    filter->shm_fb = mmap(0, IKALOG_SHM_SIZE, PROT_READ |PROT_WRITE, MAP_SHARED, filter->shm_fd, 0);
+    printf("vncserver-filiter: shared memory at %p, size %d\n", filter->shm_fb, IKALOG_SHM_SIZE);
 
 }
 
@@ -207,6 +237,8 @@ void *vncserver_worker_thread(void *param)
     filter->fb_linesize = 1280 * 4;
     int ret = avpicture_alloc(&filter->dst_picture, AV_PIX_FMT_BGRA, 1280, 720);
     filter->dst_picture.linesize[0] = 1280 * 4;
+
+    return 0;
 
     server->alwaysShared=(1==1);
 
